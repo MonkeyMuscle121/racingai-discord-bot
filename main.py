@@ -26,17 +26,11 @@ async def analyze_with_ai():
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a professional horse racing tipster.
+        prompt = f"""You are a sharp UK & Irish horse racing tipster.
 Today is {date_today}.
 
-Current UK & Irish meetings today include Warwick, Perth, Beverley, Dundalk, Southwell and others.
-
-Give exactly:
-- 4 strong bets (win or each-way)
-- 1 4-fold accumulator
-
-Format: Time + Venue - Horse - Bet type - Confidence - Short reason.
-Only use real races running today. Be realistic."""
+Give exactly 4 strong bets + 1 four-fold accumulator.
+Keep each tip very short. Only use today's real races."""
 
         response = await asyncio.wait_for(
             asyncio.get_running_loop().run_in_executor(
@@ -45,21 +39,22 @@ Only use real races running today. Be realistic."""
                     model="grok-4.20-reasoning",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.65,
-                    max_tokens=1000
+                    max_tokens=900
                 )
             ),
-            timeout=18.0
+            timeout=20.0
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content
+        return text[:2000]  # Safety cut
 
     except asyncio.TimeoutError:
-        return "❌ Timeout - Please try !tips again."
+        return "❌ Timeout. Please try !tips again."
     except Exception as e:
         return f"❌ AI Error: {str(e)[:150]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's actual cards... ⏳")
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's cards... ⏳")
     
     analysis = await analyze_with_ai()
     
@@ -69,7 +64,7 @@ async def manual_tips(ctx):
         color=0x00ff88,
         timestamp=datetime.now(pytz.utc)
     )
-    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:4096], inline=False)
+    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     
     await msg.edit(embed=embed)
