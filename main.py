@@ -1,12 +1,16 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from openai import OpenAI
-import requests
+import asyncio
+
+# xAI SDK with real-time tools
+from xai_sdk import Client
+from xai_sdk.chat import user, system
+from xai_sdk.tools import web_search, x_search
 
 load_dotenv()
 
@@ -15,78 +19,92 @@ XAI_API_KEY = os.getenv("XAI_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-
+bot = commands.Bot(command_prefix="!", intents=intents)  # prefix kept for safety
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-def get_upcoming_events():
+# ====================== FULL SPORTS HOT TIPS ======================
+async def get_full_sports_hot_tips():
     try:
-        # Free public API for upcoming events
-        today = datetime.now(pytz.utc).strftime('%Y-%m-%d')
-        response = requests.get(f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={today}", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            events = data.get("events", [])[:15]
-            summary = []
-            for e in events:
-                sport = e.get("strSport", "Sport")
-                event = e.get("strEvent", "Event")
-                time = e.get("strTime", "TBD")
-                summary.append(f"{sport} - {event} ({time})")
-            return "\n".join(summary) if summary else "Popular events in next 48 hours"
-    except:
-        pass
-    return "Horse Racing, Premier League, Tennis, UFC, Darts (popular events in next 48 hours)"
-
-async def get_daily_tips():
-    try:
-        client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
-        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
-
-        events = get_upcoming_events()
-
-        prompt = f"""Sharp multi-sport tipster.
-Current date: {date_today}.
-
-Upcoming events in next 48 hours: {events}
-
-Give exactly 4 strong bets from real events happening soon.
-
-For each bet include:
-- Sport & Event (with time/date)
-- Pick
-- Confidence (1-10)
-- Short reasoning"""
-
-        response = client.chat.completions.create(
+        client = Client(api_key=XAI_API_KEY)
+        
+        chat = client.chat.create(
             model="grok-4.20-reasoning",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=1000
+            tools=[web_search(), x_search()],   # ← Real-time web + X search enabled
+            temperature=0.7,
+            max_turns=5,
         )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error: {str(e)[:150]}"
 
-@bot.command(name="tips")
-async def daily_tips(ctx):
-    msg = await ctx.send("🔥 **Multi-Sport Tips** – Finding real events in next 48 hours... ⏳")
-    analysis = await get_daily_tips()
+        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+        
+        prompt = f"""
+Analyse within the next 48 hours all sports bets: UFC, boxing, darts, horse racing, and any other relevant events.
+Date: {date_today}
+Give me the top 4 hot tip outcomes in this exact format:
+
+**Top 4 hot tip outcomes for the next 48 hours...**
+
+1. **Event** – Outcome (odds if available, why it's hot)
+2. ...
+3. ...
+4. ...
+
+Use real-time data only. Include participants, approximate times (BST), and strong reasoning.
+"""
+
+        chat.add_message(system("You are an expert sports betting analyst. Always use the latest real-time data via tools. Be accurate with events, participants and times."))
+        chat.add_message(user(prompt))
+
+        response = await chat.sample()
+
+        return response.text
+
+    except Exception as e:
+        return f"❌ Error generating tips: {str(e)[:300]}"
+
+# ====================== SLASH COMMAND ======================
+@bot.tree.command(name="tips", description="Get the top 4 hot sports betting tips for the next 48 hours")
+async def hot_tips(interaction: discord.Interaction):
+    await interaction.response.defer()  # Prevents "interaction failed" on longer generations
+    
+    analysis = await get_full_sports_hot_tips()
     
     embed = discord.Embed(
-        title="🔥 Multi-Sport Daily Tips",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\nPowered by xAI Grok",
+        title="🔥 Top 4 Hot Tip Outcomes",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST\n🔥 Powered by xAI Grok (real-time search)",
         color=0xff00ff
     )
-    embed.add_field(name="📌 4 Strong Bets (Next 48 Hours)", value=analysis[:1020], inline=False)
-    embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
-    await msg.edit(embed=embed)
+    embed.add_field(name="Analysis", value=analysis[:4000], inline=False)
+    embed.set_footer(text="For entertainment only • Bet responsibly • 18+ • Odds change quickly")
+    
+    await interaction.followup.send(embed=embed)
+
+# ====================== SCHEDULER (Auto daily tips) ======================
+async def auto_daily_hottips():
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        analysis = await get_full_sports_hot_tips()
+        embed = discord.Embed(
+            title="🔥 Daily Hot Tips",
+            description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}",
+            color=0xff00ff
+        )
+        embed.add_field(name="Top 4 Outcomes", value=analysis[:4000], inline=False)
+        embed.set_footer(text="Bet responsibly • 18+")
+        await channel.send(embed=embed)
 
 @bot.event
 async def on_ready():
     print(f"✅ {bot.user} is ONLINE!")
+    try:
+        await bot.tree.sync()   # Sync slash commands globally
+        print("✅ Slash commands synced")
+    except Exception as e:
+        print(f"Sync warning: {e}")
+    
     scheduler.start()
+    
+    # Auto post every day at 8:00 AM GMT (uncomment if you want daily auto tips)
+    # scheduler.add_job(lambda: asyncio.create_task(auto_daily_hottips()), 'cron', hour=8, minute=0)
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
