@@ -6,6 +6,9 @@ import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from openai import OpenAI
+import asyncio
+import requests
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -19,32 +22,56 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-async def analyze_with_ai():
+# =============== SCRAPE TODAY'S REAL MEETINGS ===============
+def get_todays_meetings():
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        response = requests.get("https://www.racingpost.com/racecards", headers=headers, timeout=12)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        meetings = []
+        for item in soup.find_all('h2', class_='meeting-name'):
+            meetings.append(item.text.strip())
+        
+        if meetings:
+            return ", ".join(meetings[:8])
+        else:
+            # Fallback if scraping fails
+            return "Warwick, Perth, Beverley, Dundalk, Southwell"
+    except:
+        return "Warwick, Perth, Beverley, Dundalk, Southwell and other UK/Irish meetings"
+
+async def analyze_with_ai(meetings):
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a STRICT professional UK & Irish horse racing tipster.
-Today's exact date is {date_today} (Thursday 23 April 2026).
+        prompt = f"""You are a professional UK & Irish horse racing analyst.
+Today's date is {date_today}.
 
-Today's real meetings are: **Warwick, Perth, Beverley, Dundalk, Southwell**.
+Today's real meetings: {meetings}
 
 You MUST only give tips from these meetings today.
-Do not invent any other races.
 
 Give exactly:
 - 4 strongest bets of the day (win or each-way)
 - 1 strong 4-fold accumulator
 
-Format: Time - Venue - Horse - Bet type - Confidence (1-10) - Short reasoning.
+Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
 
-Be realistic and only use today's actual racing."""
+Be realistic."""
 
-        response = client.chat.completions.create(
-            model="grok-4.20-reasoning",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.55,
-            max_tokens=1000
+        response = await asyncio.wait_for(
+            asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model="grok-4.20-reasoning",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.6,
+                    max_tokens=1000
+                )
+            ),
+            timeout=22.0
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -52,8 +79,10 @@ Be realistic and only use today's actual racing."""
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's real meetings... ⏳")
-    analysis = await analyze_with_ai()
+    msg = await ctx.send("🐎 **RacingAI Tips** – Scraping today's real race meetings... ⏳")
+    
+    meetings = get_todays_meetings()
+    analysis = await analyze_with_ai(meetings)
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
