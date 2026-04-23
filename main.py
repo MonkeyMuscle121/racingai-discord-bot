@@ -24,30 +24,42 @@ async def analyze_with_ai():
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""Today is {date_today}. 
-Focus only on today's UK & Irish racing (Warwick, Perth, Beverley, Dundalk, Southwell etc.).
-Give exactly 4 strong bets and 1 4-fold accumulator.
-Keep each tip short: Time - Venue - Horse - Confidence - Reason."""
+        prompt = f"""You are a STRICT professional UK & Irish horse racing tipster.
+Current date: {date_today} (Thursday 23 April 2026).
+
+You are ONLY allowed to tip horses from races running TODAY.
+Do not use old meetings or invent races.
+
+Today's real meetings are Warwick, Perth, Beverley, Dundalk, Southwell and others.
+
+Give exactly:
+- 4 strongest bets of the day (win or each-way)
+- 1 strong 4-fold accumulator
+
+Format each bet as: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
+
+Only use today's actual racing. Be realistic and honest."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.65,
-            max_tokens=900
+            temperature=0.55,
+            max_tokens=1000
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ Error: {str(e)[:180]}"
+        return f"❌ AI Error: {str(e)[:200]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Generating for today... ⏳")
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's actual meetings... ⏳")
     analysis = await analyze_with_ai()
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
-        color=0x00ff88
+        color=0x00ff88,
+        timestamp=datetime.now(pytz.utc)
     )
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
