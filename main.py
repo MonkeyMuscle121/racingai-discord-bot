@@ -24,19 +24,19 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 def get_todays_racecards():
     if not RACING_USER or not RACING_PASS:
-        return "No API credentials - using fallback"
+        return "No Racing API credentials found"
     try:
         url = "https://api.theracingapi.com/v1/racecards/free"
         response = requests.get(url, auth=(RACING_USER, RACING_PASS), timeout=15)
         if response.status_code == 200:
             data = response.json()
             cards = data.get("racecards", [])
-            meetings = [card.get("course", "") for card in cards[:10]]
+            meetings = [card.get("course", "Unknown") for card in cards]
             return ", ".join(list(dict.fromkeys(meetings)))
         else:
-            return "API error - using fallback"
-    except:
-        return "Warwick, Perth, Beverley, Dundalk, Southwell"
+            return f"API error ({response.status_code})"
+    except Exception as e:
+        return f"Fetch error: {str(e)[:80]}"
 
 async def analyze_with_ai(meetings):
     try:
@@ -45,9 +45,10 @@ async def analyze_with_ai(meetings):
 
         prompt = f"""You are a professional UK & Irish horse racing analyst.
 Date: {date_today}
-Today's meetings: {meetings}
+Today's real meetings: {meetings}
 
-Give exactly 4 strong bets + 1 4-fold from today's real races only."""
+Give exactly 4 strong bets + 1 4-fold accumulator from today's races only.
+Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
@@ -71,7 +72,7 @@ async def manual_tips(ctx):
         color=0x00ff88
     )
     embed.add_field(name="Today's Meetings", value=meetings, inline=False)
-    embed.add_field(name="📌 4 Best Bets + 4-Fold", value=analysis[:1020], inline=False)
+    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
 
