@@ -7,13 +7,13 @@ import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import requests
-from groq import Groq
+from openai import OpenAI   # We use OpenAI client for xAI compatibility
 
 load_dotenv()
 
 # ===================== CONFIG =====================
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")          # NEW
 RACING_USER = os.getenv("RACING_USER")
 RACING_PASS = os.getenv("RACING_PASS")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
@@ -24,7 +24,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# =============== DATA & WEATHER ===============
+# =============== DATA & WEATHER (unchanged) ===============
 def get_todays_racecards():
     url = "https://api.theracingapi.com/v1/racecards/free"
     try:
@@ -58,12 +58,18 @@ def get_weather(venue):
     except:
         return "Weather N/A"
 
-# =============== AI ANALYSIS ===============
+# =============== AI ANALYSIS with xAI Grok ===============
 async def analyze_with_ai(racecards):
     if not racecards:
         return "No race data available today."
-    client = Groq(api_key=GROQ_API_KEY)
+
+    client = OpenAI(
+        api_key=XAI_API_KEY,
+        base_url="https://api.x.ai/v1"
+    )
+    
     race_summary = str(racecards[:15])
+
     prompt = f"""You are a professional UK & Irish horse racing analyst.
 Date: {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}
 
@@ -71,22 +77,24 @@ Today's race data summary:
 {race_summary}
 
 Task:
-- Select exactly 4 strong bets (win or each-way)
+- Select exactly 4 strong bets (win or each-way recommended)
 - Create 1 solid 4-fold accumulator
-- For every selection: Race time + venue, Horse name, Bet type, Confidence (1-10), short clear reasoning, estimated fair odds
+- For every selection include: Race time + venue, Horse name, Bet type, Confidence (1-10), short clear reasoning, estimated fair odds
 
-Be realistic. Use emojis. Reply in clean readable text only."""
+Be realistic and honest. Use emojis for nice formatting.
+Reply in clean, readable text only."""
+
     try:
-        chat = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = client.chat.completions.create(
+            model="grok-4.1-fast-reasoning",   # Cost-effective & fast. Change to "grok-4.20-reasoning" later if you want maximum quality
             messages=[{"role": "user", "content": prompt}],
             temperature=0.65,
             max_tokens=1500
         )
-        return chat.choices[0].message.content
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Groq error: {e}")
-        return "AI analysis temporarily unavailable."
+        print(f"xAI API error: {e}")
+        return "AI analysis temporarily unavailable. Please check API key and credits."
 
 # =============== DAILY POST ===============
 async def daily_racing_post():
@@ -105,7 +113,7 @@ async def daily_racing_post():
     analysis = await analyze_with_ai(racecards)
     embed = discord.Embed(
         title="🐎 RacingAI Daily Tips",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by Groq AI",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
         color=0x00ff88,
         timestamp=datetime.now(pytz.utc)
     )
@@ -120,7 +128,7 @@ async def scheduled_job():
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} is online on $7 Render tier!")
+    print(f"✅ {bot.user} is online using xAI Grok API!")
     scheduler.start()
 
 # =============== START ===============
