@@ -34,24 +34,22 @@ def get_todays_racecards():
                 course = card.get("course", "").strip()
                 if course and course not in meetings:
                     meetings.append(course)
-            return ", ".join(meetings[:10]) if meetings else "No data"
-        elif response.status_code == 429:
-            return "Rate limit - using fallback"
+            return ", ".join(meetings[:12]) if meetings else "No meetings found"
         else:
             return f"API Error: {response.status_code}"
-    except:
-        return "Warwick, Perth, Beverley, Dundalk, Southwell"
+    except Exception as e:
+        return f"Fetch error: {str(e)[:100]}"
 
 async def analyze_with_ai(meetings):
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""Professional UK & Irish horse racing analyst.
+        prompt = f"""You are a professional UK & Irish horse racing analyst.
 Date: {date_today}
 Today's real meetings: {meetings}
 
-Give exactly 4 strong bets + 1 4-fold from these meetings only.
+Give exactly 4 strong bets + 1 4-fold accumulator from today's races only.
 Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning."""
 
         response = client.chat.completions.create(
