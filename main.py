@@ -19,10 +19,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# =============== AI ANALYSIS (Fixed) ===============
 async def analyze_with_ai():
     if not XAI_API_KEY:
-        return "❌ XAI_API_KEY is missing."
+        return "❌ XAI API key is missing."
 
     client = OpenAI(
         api_key=XAI_API_KEY,
@@ -31,29 +30,28 @@ async def analyze_with_ai():
 
     date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-    prompt = f"""You are a professional UK & Irish horse racing tipster.
-Today is {date_today}.
+    prompt = f"""You are a sharp UK & Irish horse racing tipster.
+Today: {date_today}
 
-Provide your best daily tips:
+Give your best daily tips:
 - Exactly 4 strong bets (win or each-way)
-- 1 solid 4-fold accumulator
+- 1 good 4-fold accumulator
 
-For each bet include: Race time + venue, Horse name, Bet type, Confidence (1-10), short reasoning, estimated odds.
-
-Be realistic. Use emojis. Format nicely."""
+Format each bet clearly with venue, time, horse, confidence, and short reason.
+Use emojis. Be honest if the day looks average."""
 
     try:
         response = client.chat.completions.create(
-            model="grok-4.1",          # Stable & working model
+            model="grok-4.1-fast-reasoning",   # Stable model
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=1200
+            max_tokens=1100
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:250]}"
+        return f"❌ AI Error: {str(e)[:300]}"
 
-# =============== MANUAL !tips ===============
+# Manual Command
 @bot.command(name="tips")
 async def manual_tips(ctx):
     await ctx.send("🐎 **RacingAI Tips** – Generating now... ⏳")
@@ -69,12 +67,12 @@ async def manual_tips(ctx):
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await ctx.send(embed=embed)
 
-# =============== DAILY 10AM POST ===============
+# Daily Post
 async def daily_racing_post():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
         return
-    await channel.send("🐎 **RacingAI Daily Tips** – 10:00 GMT\nGenerating analysis... ⏳")
+    await channel.send("🐎 **RacingAI Daily Tips** – 10:00 GMT\nGenerating... ⏳")
     analysis = await analyze_with_ai()
     embed = discord.Embed(
         title="🐎 RacingAI Daily Tips",
