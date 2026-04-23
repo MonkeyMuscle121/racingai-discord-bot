@@ -23,8 +23,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
 def get_todays_racecards():
-    if not RACING_USER or not RACING_PASS:
-        return "No Racing API credentials found"
     try:
         url = "https://api.theracingapi.com/v1/racecards/free"
         response = requests.get(url, auth=(RACING_USER, RACING_PASS), timeout=15)
@@ -32,11 +30,12 @@ def get_todays_racecards():
             data = response.json()
             cards = data.get("racecards", [])
             meetings = [card.get("course", "Unknown") for card in cards]
-            return ", ".join(list(dict.fromkeys(meetings)))
+            unique_meetings = list(dict.fromkeys(meetings))
+            return ", ".join(unique_meetings[:10])
         else:
-            return f"API error ({response.status_code})"
+            return f"API returned {response.status_code}"
     except Exception as e:
-        return f"Fetch error: {str(e)[:80]}"
+        return f"Fetch error: {str(e)[:100]}"
 
 async def analyze_with_ai(meetings):
     try:
@@ -71,7 +70,7 @@ async def manual_tips(ctx):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
         color=0x00ff88
     )
-    embed.add_field(name="Today's Meetings", value=meetings, inline=False)
+    embed.add_field(name="Today's Meetings", value=meetings or "No data", inline=False)
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
