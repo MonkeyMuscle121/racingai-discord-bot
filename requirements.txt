@@ -4,5 +4,3 @@ python-dotenv
 openai
 pytz
 requests
-beautifulsoup4
-lxml
