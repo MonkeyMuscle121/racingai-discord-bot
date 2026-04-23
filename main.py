@@ -34,15 +34,15 @@ async def get_full_sports_hot_tips():
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=4,
+            max_turns=5,          # Allow tool calls
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
         prompt = f"""
-Analyse within the next 48 hours: UFC, boxing, darts, horse racing and any major events.
+Analyse within the next 48 hours: UFC, boxing, darts, horse racing and major events.
 Date: {date_today}
-Return exactly the top 4 hot tips using this format:
+Return exactly the top 4 hot tips in this format:
 
 **Top 4 hot tip outcomes for the next 48 hours...**
 
@@ -51,32 +51,29 @@ Return exactly the top 4 hot tips using this format:
 3. ...
 4. ...
 
-Include participants and BST times where possible. Use real-time data.
+Include participants and BST times where possible. Use real-time data only.
 """
 
         chat.append(system("You are an expert sports betting analyst. Always use tools for the latest accurate data."))
         chat.append(user(prompt))
 
-        full_response = ""
-        async for response, chunk in chat.stream():   # ← Correct unpacking: (response, chunk)
-            if chunk.content:
-                full_response += chunk.content
-
-        return full_response.strip() or "No content received from Grok."
+        # Non-streaming sample() - more reliable for Discord
+        response = await chat.sample()
+        return response.content.strip() or "No content received."
 
     except asyncio.TimeoutError:
-        return "⏳ Timed out while fetching real-time sports data. Try again shortly."
+        return "⏳ Timed out fetching real-time sports data. Try again in a minute."
     except Exception as e:
         logger.error(f"Hot tips error: {e}", exc_info=True)
-        return f"❌ Error generating tips: {str(e)[:350]}"
+        return f"❌ Error: {str(e)[:350]}"
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get top 4 hot sports betting tips for next 48h")
 async def hot_tips(interaction: discord.Interaction):
     await interaction.response.defer()
     
-    await interaction.followup.send("🔍 Pulling real-time data for UFC, boxing, darts & horse racing... (20-60s)")
-    
+    await interaction.followup.send("🔍 Pulling real-time data for UFC, boxing, darts & horse racing... (may take 30-90 seconds)")
+
     analysis = await get_full_sports_hot_tips()
     
     embed = discord.Embed(
@@ -84,8 +81,8 @@ async def hot_tips(interaction: discord.Interaction):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST\n🔥 xAI Grok Real-time",
         color=0xff00ff
     )
-    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No tips available.", inline=False)
-    embed.set_footer(text="For entertainment • Bet responsibly • 18+")
+    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No tips available at the moment.", inline=False)
+    embed.set_footer(text="For entertainment only • Bet responsibly • 18+")
     
     await interaction.followup.send(embed=embed)
 
