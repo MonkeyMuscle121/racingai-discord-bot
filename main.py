@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 
 # xAI SDK with real-time tools
-from xai_sdk import Client
+from xai_sdk import AsyncClient  # ← Changed to AsyncClient
 from xai_sdk.chat import user, system
 from xai_sdk.tools import web_search, x_search
 
@@ -19,19 +19,18 @@ XAI_API_KEY = os.getenv("XAI_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)  # prefix kept for safety
+bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
 # ====================== FULL SPORTS HOT TIPS ======================
 async def get_full_sports_hot_tips():
     try:
-        client = Client(api_key=XAI_API_KEY)
+        client = AsyncClient(api_key=XAI_API_KEY)  # ← AsyncClient
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
-            tools=[web_search(), x_search()],   # ← Real-time web + X search enabled
+            tools=[web_search(), x_search()],   # Real-time web + X search enabled
             temperature=0.7,
-            max_turns=5,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
@@ -51,20 +50,20 @@ Give me the top 4 hot tip outcomes in this exact format:
 Use real-time data only. Include participants, approximate times (BST), and strong reasoning.
 """
 
-        chat.add_message(system("You are an expert sports betting analyst. Always use the latest real-time data via tools. Be accurate with events, participants and times."))
-        chat.add_message(user(prompt))
+        chat.append(system("You are an expert sports betting analyst. Always use the latest real-time data via tools. Be accurate with events, participants and times."))
+        chat.append(user(prompt))
 
-        response = await chat.sample()
+        response = await chat.sample()   # ← This is async
 
-        return response.text
+        return response.content   # ← .content not .text
 
     except Exception as e:
-        return f"❌ Error generating tips: {str(e)[:300]}"
+        return f"❌ Error generating tips: {str(e)[:400]}"
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get the top 4 hot sports betting tips for the next 48 hours")
 async def hot_tips(interaction: discord.Interaction):
-    await interaction.response.defer()  # Prevents "interaction failed" on longer generations
+    await interaction.response.defer()
     
     analysis = await get_full_sports_hot_tips()
     
@@ -78,7 +77,7 @@ async def hot_tips(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed)
 
-# ====================== SCHEDULER (Auto daily tips) ======================
+# ====================== OPTIONAL AUTO DAILY ======================
 async def auto_daily_hottips():
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
@@ -96,14 +95,14 @@ async def auto_daily_hottips():
 async def on_ready():
     print(f"✅ {bot.user} is ONLINE!")
     try:
-        await bot.tree.sync()   # Sync slash commands globally
+        await bot.tree.sync()
         print("✅ Slash commands synced")
     except Exception as e:
         print(f"Sync warning: {e}")
     
     scheduler.start()
     
-    # Auto post every day at 8:00 AM GMT (uncomment if you want daily auto tips)
+    # Auto daily tips at 8:00 AM GMT - Uncomment if you want automatic posts
     # scheduler.add_job(lambda: asyncio.create_task(auto_daily_hottips()), 'cron', hour=8, minute=0)
 
 if __name__ == "__main__":
