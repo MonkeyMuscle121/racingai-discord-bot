@@ -27,36 +27,36 @@ async def analyze_with_ai():
 
     date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-    prompt = f"""You are a professional UK & Irish horse racing analyst.
-Today is {date_today}.
+    prompt = f"""You are a strict professional UK & Irish horse racing analyst.
+Today's date is {date_today}.
 
-Today's actual race meetings include: **Warwick, Perth, Beverley, Dundalk, Southwell** and others.
+You MUST only give tips for races that are actually running TODAY.
+Do not invent races or meetings.
 
-Analyse form, ground conditions, weather, trainer/jockey stats, etc.
+Current known meetings today usually include places like Warwick, Perth, Beverley, Dundalk, Southwell, etc.
 
-Return:
-- Exactly 4 strong bets (win or each-way)
-- 1 solid 4-fold accumulator
+Rules:
+- Only suggest horses from today's actual cards.
+- Give exactly 4 strong bets (win or each-way)
+- Give 1 strong 4-fold accumulator
+- For each bet include: Race time + venue, Horse name, Bet type, Confidence (1-10), short reasoning
 
-For each bet include: Race time + venue, Horse name, Bet type, Confidence (1-10), short clear reasoning.
-
-Be realistic and use emojis."""
+Be honest. If the day is weak, say so. Use emojis."""
 
     try:
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.65,
-            max_tokens=1100
+            temperature=0.6,
+            max_tokens=1200
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:200]}"
+        return f"❌ AI Error: {str(e)[:250]}"
 
-# Manual !tips
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Generating now... ⏳")
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's actual cards... ⏳")
     analysis = await analyze_with_ai()
     
     embed = discord.Embed(
@@ -69,12 +69,12 @@ async def manual_tips(ctx):
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
 
-# Daily 10AM Post
+# Daily Post
 async def daily_racing_post():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
         return
-    await channel.send("🐎 **RacingAI Daily Tips** – 10:00 GMT\nGenerating analysis... ⏳")
+    await channel.send("🐎 **RacingAI Daily Tips** – 10:00 GMT\nAnalysing today's real cards... ⏳")
     analysis = await analyze_with_ai()
     embed = discord.Embed(
         title="🐎 RacingAI Daily Tips",
