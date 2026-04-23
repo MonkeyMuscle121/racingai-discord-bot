@@ -25,20 +25,20 @@ async def analyze_with_ai():
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         prompt = f"""You are a STRICT professional UK & Irish horse racing tipster.
-Current date: {date_today} (Thursday 23 April 2026).
+Today's exact date is {date_today} (Thursday 23 April 2026).
 
-You are ONLY allowed to tip horses from races running TODAY.
-Do not use old meetings or invent races.
+Today's real meetings are: **Warwick, Perth, Beverley, Dundalk, Southwell**.
 
-Today's real meetings are Warwick, Perth, Beverley, Dundalk, Southwell and others.
+You MUST only give tips from these meetings today.
+Do not invent any other races.
 
 Give exactly:
 - 4 strongest bets of the day (win or each-way)
 - 1 strong 4-fold accumulator
 
-Format each bet as: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
+Format: Time - Venue - Horse - Bet type - Confidence (1-10) - Short reasoning.
 
-Only use today's actual racing. Be realistic and honest."""
+Be realistic and only use today's actual racing."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
@@ -52,7 +52,7 @@ Only use today's actual racing. Be realistic and honest."""
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's actual meetings... ⏳")
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's real meetings... ⏳")
     analysis = await analyze_with_ai()
     
     embed = discord.Embed(
