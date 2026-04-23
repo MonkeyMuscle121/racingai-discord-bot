@@ -7,8 +7,6 @@ from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from openai import OpenAI
 import asyncio
-import requests
-from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -22,48 +20,26 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# =============== SCRAPE TODAY'S RACECARDS ===============
-def get_todays_racecards():
-    try:
-        # Scrape from a reliable free source
-        url = "https://www.irishracing.com/racecards"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        meetings = []
-        for meeting in soup.find_all('div', class_='meeting'):
-            name = meeting.find('h3')
-            if name:
-                meetings.append(name.text.strip())
-        
-        if not meetings:
-            # Fallback
-            return "Today's meetings: Warwick, Perth, Beverley, Dundalk, Southwell (and others)"
-        return f"Today's meetings: {', '.join(meetings[:8])}"
-    except:
-        return "Warwick, Perth, Beverley, Dundalk, Southwell and other UK/Irish meetings today"
-
-async def analyze_with_ai(race_summary):
+async def analyze_with_ai():
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a professional UK & Irish horse racing analyst.
+        prompt = f"""You are a professional UK & Irish horse racing tipster.
 Today's date is {date_today}.
 
-Real meetings today: {race_summary}
+Focus ONLY on races running TODAY (Thursday 23 April 2026).
 
-Analyse form, ground, weather, trainer/jockey stats.
+Meetings today include Warwick, Perth, Beverley, Dundalk, Southwell, etc.
 
-Return exactly:
-- 4 strongest bets of the day (win or each-way)
+Give exactly:
+- 4 best bets of the day (win or each-way)
 - 1 strong 4-fold accumulator
 
-Format: Time - Venue - Horse - Bet type - Confidence (1-10) - Short reasoning.
+Format each bet clearly: Time - Venue - Horse - Confidence - Short reason.
 
-Only use today's real races. Be realistic."""
+Be realistic and only use today's actual racing."""
 
         response = await asyncio.wait_for(
             asyncio.get_running_loop().run_in_executor(
@@ -72,22 +48,22 @@ Only use today's real races. Be realistic."""
                     model="grok-4.20-reasoning",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.6,
-                    max_tokens=1100
+                    max_tokens=900
                 )
             ),
-            timeout=22.0
+            timeout=18.0   # Reduced timeout
         )
         return response.choices[0].message.content
 
+    except asyncio.TimeoutError:
+        return "❌ Timeout. Please try !tips again in 30 seconds."
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:200]}"
+        return f"❌ Error: {str(e)[:150]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Fetching today's real racecards... ⏳")
-    
-    race_summary = get_todays_racecards()
-    analysis = await analyze_with_ai(race_summary)
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's real cards... ⏳")
+    analysis = await analyze_with_ai()
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
