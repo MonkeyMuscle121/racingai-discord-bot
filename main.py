@@ -22,44 +22,39 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# =============== SCRAPE TODAY'S REAL MEETINGS ===============
 def get_todays_meetings():
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        response = requests.get("https://www.racingpost.com/racecards", headers=headers, timeout=12)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        # UK focused site
+        response = requests.get("https://www.racingpost.com/racecards", headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         meetings = []
-        for item in soup.find_all('h2', class_='meeting-name'):
-            meetings.append(item.text.strip())
+        for tag in soup.find_all(['h2', 'h3']):
+            text = tag.get_text().strip()
+            if any(word in text for word in ["Warwick", "Perth", "Beverley", "Dundalk", "Southwell", "Chester", "Newmarket", "Ascot"]):
+                meetings.append(text)
         
         if meetings:
             return ", ".join(meetings[:8])
         else:
-            # Fallback if scraping fails
             return "Warwick, Perth, Beverley, Dundalk, Southwell"
     except:
-        return "Warwick, Perth, Beverley, Dundalk, Southwell and other UK/Irish meetings"
+        return "Warwick, Perth, Beverley, Dundalk, Southwell"
 
 async def analyze_with_ai(meetings):
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a professional UK & Irish horse racing analyst.
+        prompt = f"""You are a professional UK & Irish horse racing tipster.
 Today's date is {date_today}.
 
 Today's real meetings: {meetings}
 
-You MUST only give tips from these meetings today.
-
-Give exactly:
-- 4 strongest bets of the day (win or each-way)
-- 1 strong 4-fold accumulator
-
-Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
-
-Be realistic."""
+Only tip from these meetings.
+Give exactly 4 strong bets + 1 4-fold accumulator.
+Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning."""
 
         response = await asyncio.wait_for(
             asyncio.get_running_loop().run_in_executor(
@@ -71,7 +66,7 @@ Be realistic."""
                     max_tokens=1000
                 )
             ),
-            timeout=22.0
+            timeout=20.0
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -79,16 +74,14 @@ Be realistic."""
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Scraping today's real race meetings... ⏳")
-    
+    msg = await ctx.send("🐎 **RacingAI Tips** – Scraping today's UK & Irish meetings... ⏳")
     meetings = get_todays_meetings()
     analysis = await analyze_with_ai(meetings)
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
-        color=0x00ff88,
-        timestamp=datetime.now(pytz.utc)
+        color=0x00ff88
     )
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
