@@ -25,9 +25,12 @@ async def get_daily_tips():
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         prompt = f"""You are a sharp multi-sport tipster.
-Date: {date_today}
+Current date and time: {date_today} (GMT).
 
-Give exactly 4 strong bets across different sports (Horse Racing, Soccer, Tennis, UFC, Boxing, Darts).
+ONLY tip events that are happening or starting within the next 24 hours.
+Popular sports: Horse Racing, Premier League, Champions League, Tennis (ATP/WTA), UFC, Boxing, Darts.
+
+Give exactly 4 strong, realistic bets.
 
 For each bet include:
 - Sport & Event
@@ -35,7 +38,7 @@ For each bet include:
 - Confidence (1-10)
 - Short reasoning
 
-Be realistic and only tip things you are confident in today."""
+Be realistic. Do not invent events."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
@@ -45,11 +48,11 @@ Be realistic and only tip things you are confident in today."""
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:200]}"
+        return f"❌ Error: {str(e)[:150]}"
 
 @bot.command(name="tips")
 async def daily_tips(ctx):
-    msg = await ctx.send("🔥 **Multi-Sport Daily Tips** – Generating strong picks... ⏳")
+    msg = await ctx.send("🔥 **Multi-Sport Daily Tips** – Loading strong picks for the next 24 hours... ⏳")
     analysis = await get_daily_tips()
     
     embed = discord.Embed(
@@ -57,13 +60,13 @@ async def daily_tips(ctx):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\nPowered by xAI Grok",
         color=0xff00ff
     )
-    embed.add_field(name="📌 4 Strong Bets", value=analysis[:1020], inline=False)
+    embed.add_field(name="📌 4 Strong Bets (Next 24 Hours)", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} is ONLINE! Multi-Sport Mode Active")
+    print(f"✅ {bot.user} is ONLINE!")
     scheduler.start()
 
 if __name__ == "__main__":
