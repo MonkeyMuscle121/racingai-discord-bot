@@ -6,7 +6,6 @@ import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from openai import OpenAI
-import asyncio
 
 load_dotenv()
 
@@ -21,51 +20,51 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def analyze_with_ai():
+    if not XAI_API_KEY:
+        return "❌ XAI API key is missing."
+
+    client = OpenAI(
+        api_key=XAI_API_KEY,
+        base_url="https://api.x.ai/v1"
+    )
+
+    date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+
+    prompt = f"""You are a professional UK & Irish horse racing tipster.
+Today is {date_today}.
+
+Give:
+- 4 strong bets (win or each-way)
+- 1 solid 4-fold accumulator
+
+Include venue, time, horse, confidence, and short reason.
+Use emojis. Be realistic."""
+
     try:
-        if not XAI_API_KEY:
-            return "❌ XAI API key is missing."
-
-        client = OpenAI(
-            api_key=XAI_API_KEY,
-            base_url="https://api.x.ai/v1"
-        )
-
-        prompt = "Today horse racing tips: Give 4 bets + 1 fourfold accumulator. Keep it short."
-
-        response = await asyncio.wait_for(
-            asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: client.chat.completions.create(
-                    model="grok-4.1",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=800
-                )
-            ),
-            timeout=25.0  # 25 second timeout
+        response = client.chat.completions.create(
+            model="grok-4.20-reasoning",   # Correct current model
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1000
         )
         return response.choices[0].message.content
-
-    except asyncio.TimeoutError:
-        return "❌ Timeout - AI took too long. Try again."
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:150]}"
+        return f"❌ AI Error: {str(e)[:250]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
     msg = await ctx.send("🐎 **RacingAI Tips** – Generating now... ⏳")
-    
     analysis = await analyze_with_ai()
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
-        color=0x00ff88
+        color=0x00ff88,
+        timestamp=datetime.now(pytz.utc)
     )
-    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:4000], inline=False)
+    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:4096], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
-    
-    await msg.edit(embed=embed)   # Update the message
+    await msg.edit(embed=embed)
 
 @bot.event
 async def on_ready():
