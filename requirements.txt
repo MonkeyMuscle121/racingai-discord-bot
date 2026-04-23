@@ -1,6 +1,5 @@
 discord.py
-APScheduler
+apscheduler
 python-dotenv
-openai
+xai-sdk
 pytz
-requests
