@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from groq import Groq
+from openai import OpenAI
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
@@ -20,27 +20,36 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def analyze_with_ai():
-    try:
-        client = Groq(api_key=GROQ_API_KEY)
-        
-        prompt = f"""You are a professional horse racing tipster.
-Today: {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}
+    if not XAI_API_KEY:
+        return "❌ XAI API key missing."
 
-Give:
+    client = OpenAI(
+        api_key=XAI_API_KEY,
+        base_url="https://api.x.ai/v1"
+    )
+
+    date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+
+    prompt = f"""You are an expert UK & Irish horse racing tipster.
+Today is {date_today}.
+
+Provide:
 - 4 strong bets (win or each-way)
-- 1 4-fold accumulator
+- 1 good 4-fold accumulator
 
-Keep responses clear and use emojis."""
+Include venue, time, horse, confidence, and short reason for each bet.
+Use emojis. Keep it clear and realistic."""
 
+    try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="grok-4.20",               # Current stable flagship model
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1000
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ Error: {str(e)[:200]}"
+        return f"❌ AI Error: {str(e)[:300]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
@@ -49,12 +58,34 @@ async def manual_tips(ctx):
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}",
-        color=0x00ff88
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
+        color=0x00ff88,
+        timestamp=datetime.now(pytz.utc)
     )
-    embed.add_field(name="📌 4 Best Bets + 4-Fold", value=analysis[:4000], inline=False)
-    embed.set_footer(text="For entertainment only • Gamble responsibly")
+    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:4096], inline=False)
+    embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await ctx.send(embed=embed)
+
+# Daily automatic post
+async def daily_racing_post():
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
+    await channel.send("🐎 **RacingAI Daily Tips** – 10:00 GMT\nGenerating... ⏳")
+    analysis = await analyze_with_ai()
+    embed = discord.Embed(
+        title="🐎 RacingAI Daily Tips",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
+        color=0x00ff88,
+        timestamp=datetime.now(pytz.utc)
+    )
+    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:4096], inline=False)
+    embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
+    await channel.send(embed=embed)
+
+@scheduler.scheduled_job('cron', hour=10, minute=0, timezone='GMT')
+async def scheduled_job():
+    await daily_racing_post()
 
 @bot.event
 async def on_ready():
