@@ -21,7 +21,7 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def analyze_with_ai():
     if not XAI_API_KEY:
-        return "❌ XAI API key is missing in Render."
+        return "❌ XAI API key is missing."
 
     client = OpenAI(
         api_key=XAI_API_KEY,
@@ -33,26 +33,22 @@ async def analyze_with_ai():
     prompt = f"""You are a professional UK & Irish horse racing tipster.
 Today is {date_today}.
 
-Give your best daily tips:
-- Exactly 4 strong bets (win or each-way)
-- 1 solid 4-fold accumulator
-
-For each bet: Race time + venue, Horse name, Bet type, Confidence (1-10), short reasoning, estimated odds.
-
-Be realistic and use emojis."""
+Give 4 strong bets and 1 4-fold accumulator.
+Include venue, time, horse, confidence, and short reasoning for each."""
 
     try:
+        # Try the most stable model first
         response = client.chat.completions.create(
-            model="grok-4.1",          # This is a confirmed working model
+            model="grok-4.20-reasoning",   # Current recommended model
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1100
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:250]}"
+        return f"❌ AI Error: {str(e)[:300]}"
 
-# Manual !tips
+# Manual Command
 @bot.command(name="tips")
 async def manual_tips(ctx):
     await ctx.send("🐎 **RacingAI Tips** – Generating now... ⏳")
@@ -68,7 +64,7 @@ async def manual_tips(ctx):
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await ctx.send(embed=embed)
 
-# Daily 10AM Post
+# Daily Post at 10:00 AM GMT
 async def daily_racing_post():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
@@ -96,3 +92,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
+    
