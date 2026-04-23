@@ -6,74 +6,65 @@ import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from openai import OpenAI
-import requests
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
-RACING_USER = os.getenv("RACING_USER")
-RACING_PASS = os.getenv("RACING_PASS")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="/", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-def get_todays_racecards():
-    try:
-        url = "https://api.theracingapi.com/v1/racecards/free"
-        response = requests.get(url, auth=(RACING_USER, RACING_PASS), timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            cards = data.get("racecards", [])
-            meetings = []
-            for card in cards:
-                course = card.get("course", "").strip()
-                if course and course not in meetings:
-                    meetings.append(course)
-            return ", ".join(meetings[:12]) if meetings else "No meetings found"
-        else:
-            return f"API Error: {response.status_code}"
-    except Exception as e:
-        return f"Fetch error: {str(e)[:100]}"
+TODAYS_MEETINGS = "Warwick, Perth, Beverley, Dundalk, Southwell"
 
-async def analyze_with_ai(meetings):
+@bot.command(name="setmeetings")
+async def set_meetings(ctx, *, meetings: str):
+    global TODAYS_MEETINGS
+    TODAYS_MEETINGS = meetings.strip()
+    await ctx.send(f"✅ **Meetings updated!**\nToday's meetings: **{TODAYS_MEETINGS}**")
+
+@bot.command(name="meetings")
+async def list_meetings(ctx):
+    await ctx.send("**Common UK & Irish Racecourses:**\nAscot, Aintree, Ayr, Bangor, Bath, Beverley, Brighton, Carlisle, Cartmel, Catterick, Cheltenham, Chester, Doncaster, Dundalk, Epsom, Exeter, Ffos Las, Fontwell, Goodwood, Gowran Park, Hamilton, Haydock, Hereford, Hexham, Huntingdon, Kelso, Kempton, Leicester, Lingfield, Ludlow, Market Rasen, Musselburgh, Newbury, Newcastle, Newmarket, Nottingham, Perth, Plumpton, Pontefract, Redcar, Ripon, Salisbury, Sandown, Sedgefield, Southwell, Stratford, Taunton, Thirsk, Towcester, Uttoxeter, Warwick, Wincanton, Windsor, Wolverhampton, Worcester, Yarmouth, York\n\nUse: `/setmeetings Warwick, Perth, Beverley, Dundalk, Southwell`")
+
+async def analyze_with_ai():
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a professional UK & Irish horse racing analyst.
+        prompt = f"""Strict UK & Irish horse racing tipster.
 Date: {date_today}
-Today's real meetings: {meetings}
+Today's meetings: {TODAYS_MEETINGS}
 
-Give exactly 4 strong bets + 1 4-fold accumulator from today's races only.
+Only tip from these meetings.
+Give exactly 4 strong bets + 1 4-fold.
 Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
+            temperature=0.55,
             max_tokens=1000
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:200]}"
+        return f"❌ Error: {str(e)[:150]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI** – Fetching real racecards... ⏳")
-    meetings = get_todays_racecards()
-    analysis = await analyze_with_ai(meetings)
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's meetings... ⏳")
+    analysis = await analyze_with_ai()
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
         color=0x00ff88
     )
-    embed.add_field(name="Today's Meetings", value=meetings, inline=False)
+    embed.add_field(name="Today's Meetings", value=TODAYS_MEETINGS, inline=False)
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
