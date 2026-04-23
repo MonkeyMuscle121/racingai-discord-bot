@@ -6,11 +6,14 @@ import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from openai import OpenAI
+import requests
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
+RACING_USER = os.getenv("RACING_USER")
+RACING_PASS = os.getenv("RACING_PASS")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
@@ -19,39 +22,56 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-async def analyze_with_ai():
+def get_todays_racecards():
+    if not RACING_USER or not RACING_PASS:
+        return "No API credentials - using fallback"
+    try:
+        url = "https://api.theracingapi.com/v1/racecards/free"
+        response = requests.get(url, auth=(RACING_USER, RACING_PASS), timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            cards = data.get("racecards", [])
+            meetings = [card.get("course", "") for card in cards[:10]]
+            return ", ".join(list(dict.fromkeys(meetings)))
+        else:
+            return "API error - using fallback"
+    except:
+        return "Warwick, Perth, Beverley, Dundalk, Southwell"
+
+async def analyze_with_ai(meetings):
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""Today is {date_today}.
+        prompt = f"""You are a professional UK & Irish horse racing analyst.
+Date: {date_today}
+Today's meetings: {meetings}
 
-UK & Irish racing today includes Warwick, Perth, Beverley, Dundalk, Southwell.
-
-Give exactly 4 strong bets + 1 4-fold accumulator from today's racing.
-Format: Time - Venue - Horse - Confidence - Reason."""
+Give exactly 4 strong bets + 1 4-fold from today's real races only."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.65,
-            max_tokens=900
+            temperature=0.6,
+            max_tokens=1000
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ Error: {str(e)[:150]}"
+        return f"❌ AI Error: {str(e)[:200]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Generating for today... ⏳")
-    analysis = await analyze_with_ai()
+    msg = await ctx.send("🐎 **RacingAI** – Fetching real racecards... ⏳")
+    meetings = get_todays_racecards()
+    analysis = await analyze_with_ai(meetings)
     
     embed = discord.Embed(
         title="🐎 RacingAI Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
         color=0x00ff88
     )
-    embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
+    embed.add_field(name="Today's Meetings", value=meetings, inline=False)
+    embed.add_field(name="📌 4 Best Bets + 4-Fold", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
 
