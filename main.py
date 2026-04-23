@@ -22,7 +22,7 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 # =============== AI ANALYSIS (Fixed) ===============
 async def analyze_with_ai():
     if not XAI_API_KEY:
-        return "❌ XAI_API_KEY is missing in Render Environment."
+        return "❌ XAI_API_KEY is missing."
 
     client = OpenAI(
         api_key=XAI_API_KEY,
@@ -34,27 +34,26 @@ async def analyze_with_ai():
     prompt = f"""You are a professional UK & Irish horse racing tipster.
 Today is {date_today}.
 
-Even without detailed racecards, provide your best daily tips.
-Return exactly:
-- 4 strong bets (win or each-way)
+Provide your best daily tips:
+- Exactly 4 strong bets (win or each-way)
 - 1 solid 4-fold accumulator
 
 For each bet include: Race time + venue, Horse name, Bet type, Confidence (1-10), short reasoning, estimated odds.
 
-Use emojis and keep it clean and readable."""
+Be realistic. Use emojis. Format nicely."""
 
     try:
         response = client.chat.completions.create(
-            model="grok-4.1-fast",           # Changed to a more reliable model
+            model="grok-4.1",          # Stable & working model
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1200
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:300]}"
+        return f"❌ AI Error: {str(e)[:250]}"
 
-# =============== MANUAL !tips COMMAND ===============
+# =============== MANUAL !tips ===============
 @bot.command(name="tips")
 async def manual_tips(ctx):
     await ctx.send("🐎 **RacingAI Tips** – Generating now... ⏳")
@@ -93,7 +92,7 @@ async def scheduled_job():
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} is ONLINE and ready!")
+    print(f"✅ {bot.user} is ONLINE!")
     scheduler.start()
 
 if __name__ == "__main__":
