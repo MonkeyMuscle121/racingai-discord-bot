@@ -2,5 +2,5 @@ discord.py
 APScheduler
 requests
 python-dotenv
-groq
+openai
 pytz
