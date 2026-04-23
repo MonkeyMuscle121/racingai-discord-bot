@@ -26,11 +26,19 @@ async def analyze_with_ai():
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a sharp UK & Irish horse racing tipster.
-Today is {date_today}.
+        prompt = f"""You are a strict professional UK & Irish horse racing tipster.
+Today's date is {date_today}.
 
-Give exactly 4 strong bets + 1 four-fold accumulator.
-Keep each tip very short. Only use today's real races."""
+You MUST only give tips for races actually running TODAY (Thursday 23 April 2026).
+Known meetings today include: Warwick, Perth, Beverley, Dundalk, Southwell, and others.
+
+Rules:
+- Only suggest horses from today's real cards.
+- Give exactly 4 strong bets (win or each-way)
+- Give 1 strong 4-fold accumulator
+- For each bet: Race time + Venue - Horse - Bet type - Confidence (1-10) - Short reasoning
+
+Be realistic and honest. Use emojis."""
 
         response = await asyncio.wait_for(
             asyncio.get_running_loop().run_in_executor(
@@ -38,24 +46,22 @@ Keep each tip very short. Only use today's real races."""
                 lambda: client.chat.completions.create(
                     model="grok-4.20-reasoning",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.65,
-                    max_tokens=900
+                    temperature=0.6,
+                    max_tokens=1000
                 )
             ),
             timeout=20.0
         )
-        text = response.choices[0].message.content
-        return text[:2000]  # Safety cut
+        return response.choices[0].message.content
 
     except asyncio.TimeoutError:
-        return "❌ Timeout. Please try !tips again."
+        return "❌ Timeout - Please try !tips again."
     except Exception as e:
-        return f"❌ AI Error: {str(e)[:150]}"
+        return f"❌ AI Error: {str(e)[:200]}"
 
 @bot.command(name="tips")
 async def manual_tips(ctx):
-    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's cards... ⏳")
-    
+    msg = await ctx.send("🐎 **RacingAI Tips** – Analysing today's actual cards... ⏳")
     analysis = await analyze_with_ai()
     
     embed = discord.Embed(
@@ -66,7 +72,6 @@ async def manual_tips(ctx):
     )
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
-    
     await msg.edit(embed=embed)
 
 @bot.event
