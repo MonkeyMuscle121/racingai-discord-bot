@@ -29,24 +29,23 @@ def get_todays_racecards():
         if response.status_code == 200:
             data = response.json()
             cards = data.get("racecards", [])
-            meetings = [card.get("course", "Unknown") for card in cards]
-            unique_meetings = list(dict.fromkeys(meetings))
-            return ", ".join(unique_meetings[:10])
+            meetings = [card.get("course", "") for card in cards]
+            return ", ".join(list(dict.fromkeys(meetings))[:10])
         else:
-            return f"API returned {response.status_code}"
+            return f"API Error ({response.status_code})"
     except Exception as e:
-        return f"Fetch error: {str(e)[:100]}"
+        return f"Fetch failed: {str(e)[:80]}"
 
 async def analyze_with_ai(meetings):
     try:
         client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
-        prompt = f"""You are a professional UK & Irish horse racing analyst.
+        prompt = f"""Professional UK & Irish horse racing analyst.
 Date: {date_today}
 Today's real meetings: {meetings}
 
-Give exactly 4 strong bets + 1 4-fold accumulator from today's races only.
+Only use these meetings. Give exactly 4 strong bets + 1 4-fold.
 Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning."""
 
         response = client.chat.completions.create(
@@ -70,7 +69,7 @@ async def manual_tips(ctx):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')}\n🔥 Powered by xAI Grok",
         color=0x00ff88
     )
-    embed.add_field(name="Today's Meetings", value=meetings or "No data", inline=False)
+    embed.add_field(name="Today's Meetings", value=meetings, inline=False)
     embed.add_field(name="📌 4 Best Bets + 4-Fold Acca", value=analysis[:1020], inline=False)
     embed.set_footer(text="For entertainment only • Gamble responsibly • 18+")
     await msg.edit(embed=embed)
