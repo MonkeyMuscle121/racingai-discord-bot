@@ -19,8 +19,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# =============== UPDATE THIS LINE EVERY MORNING ===============
-TODAYS_MEETINGS = "Warwick, Perth, Beverley, Dundalk, Southwell"   # ← Change this daily
+# =============== UPDATE THIS DAILY (takes 10 seconds) ===============
+TODAYS_MEETINGS = "Warwick, Perth, Beverley, Dundalk, Southwell"   # Change this line every morning
 
 async def analyze_with_ai():
     try:
@@ -28,24 +28,24 @@ async def analyze_with_ai():
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         prompt = f"""You are a professional UK & Irish horse racing tipster.
-Today's exact date is {date_today}.
+Today's date is {date_today}.
 
 Today's real meetings: {TODAYS_MEETINGS}
 
-You MUST only give tips from these meetings. Do not invent races.
+You are ONLY allowed to give tips from these meetings. Do not invent any other races.
 
 Give exactly:
 - 4 strongest bets of the day (win or each-way)
 - 1 strong 4-fold accumulator
 
-Format: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
+Format each bet: Time - Venue - Horse - Confidence (1-10) - Short reasoning.
 
-Be realistic and honest."""
+Be realistic."""
 
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.55,
+            temperature=0.5,
             max_tokens=1000
         )
         return response.choices[0].message.content
