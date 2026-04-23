@@ -28,66 +28,64 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def get_full_sports_hot_tips():
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=180)  # Longer timeout for tools
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=180)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=4,          # Limit tool loops to prevent long hangs
+            max_turns=4,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
         prompt = f"""
-Analyse within the next 48 hours: UFC, boxing, darts, horse racing and major events.
+Analyse within the next 48 hours: UFC, boxing, darts, horse racing and any major events.
 Date: {date_today}
-Return exactly the top 4 hot tips in this format only:
+Return exactly the top 4 hot tips using this format:
 
 **Top 4 hot tip outcomes for the next 48 hours...**
 
-1. **Event** – Outcome (odds, why hot)
+1. **Event** – Outcome (odds if available, why hot)
 2. ...
 3. ...
 4. ...
 
-Use current data. Include times in BST where possible.
+Include participants and BST times where possible. Use real-time data.
 """
 
-        chat.append(system("Expert sports betting analyst. Use tools for real-time accuracy."))
+        chat.append(system("You are an expert sports betting analyst. Always use tools for the latest accurate data."))
         chat.append(user(prompt))
 
-        # Use streaming so Discord sees progress
         full_response = ""
-        async for chunk in chat.stream():
+        async for response, chunk in chat.stream():   # ← Correct unpacking: (response, chunk)
             if chunk.content:
                 full_response += chunk.content
-                # Optional: you could edit a message here for live updates
 
-        return full_response or "No content received."
+        return full_response.strip() or "No content received from Grok."
 
     except asyncio.TimeoutError:
-        return "⏳ Request timed out. Try again in a moment (sports data searches can be slow)."
+        return "⏳ Timed out while fetching real-time sports data. Try again shortly."
     except Exception as e:
         logger.error(f"Hot tips error: {e}", exc_info=True)
-        return f"❌ Error: {str(e)[:300]}"
+        return f"❌ Error generating tips: {str(e)[:350]}"
 
 # ====================== SLASH COMMAND ======================
-@bot.tree.command(name="tips", description="Get top 4 hot sports betting tips")
+@bot.tree.command(name="tips", description="Get top 4 hot sports betting tips for next 48h")
 async def hot_tips(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=False)
+    await interaction.response.defer()
     
-    await interaction.followup.send("🔍 Analysing real-time sports data (UFC, boxing, darts, racing)... This can take 20-60 seconds.")
+    await interaction.followup.send("🔍 Pulling real-time data for UFC, boxing, darts & horse racing... (20-60s)")
     
     analysis = await get_full_sports_hot_tips()
     
     embed = discord.Embed(
         title="🔥 Top 4 Hot Tip Outcomes",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST\n🔥 xAI Grok Real-time",
         color=0xff00ff
     )
-    embed.add_field(name="Tips", value=analysis[:3900] or "No tips generated.", inline=False)
-    embed.set_footer(text="Powered by xAI Grok • Real-time search • Bet responsibly")
+    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No tips available.", inline=False)
+    embed.set_footer(text="For entertainment • Bet responsibly • 18+")
     
     await interaction.followup.send(embed=embed)
 
@@ -98,7 +96,7 @@ async def on_ready():
         await bot.tree.sync()
         print("✅ Slash commands synced")
     except Exception as e:
-        print(f"Sync issue: {e}")
+        print(f"Sync warning: {e}")
     
     scheduler.start()
 
