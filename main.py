@@ -4,6 +4,7 @@ import pytz
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
+from discord.ui import Button, View
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
@@ -43,24 +44,6 @@ def normalize_sport(sport: str) -> str:
         return "horse_racing"
     return sport_lower
 
-def get_coloured_bar(percentage: int) -> str:
-    """Creates a visual battery bar with blue to red gradient"""
-    filled = max(1, int(percentage / 10))
-    empty = 10 - filled
-    
-    if percentage >= 85:
-        bar = "🟥" * filled + "⬛" * empty + " 🔥"
-    elif percentage >= 70:
-        bar = "🟧" * filled + "⬛" * empty
-    elif percentage >= 55:
-        bar = "🟨" * filled + "⬛" * empty
-    elif percentage >= 35:
-        bar = "🟦" * filled + "⬛" * empty
-    else:
-        bar = "🔵" * filled + "⬛" * empty
-    
-    return f"{bar} **{percentage}%**"
-
 def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return '\n'.join(line.strip() for line in text.split('\n'))
@@ -88,27 +71,53 @@ async def get_sports_tips(sport: str):
         prompt = f"""
 Current date: {date_today} BST. STRICT: Only next 48 hours.
 
-Return exactly 4 tips in this format:
+Return exactly 4 fresh tips in this format:
 
-**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX% [BAR]  
+**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
 → Savage funny bantery line.
 
-Use a visual bar that fills according to the percentage.
 """
 
-        chat.append(system("""You are a savage, cheeky Racing AI bot. 
-Always show confidence as "Confidence: XX% [visual bar]". 
-Use blue for low, orange for medium, red for high confidence."""))
-        
+        chat.append(system("You are a savage, cheeky Racing AI bot. Keep it funny with family banter."))
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in next 48 hours."
+        return cleaned or "No upcoming events."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         return f"❌ Error fetching tips: {str(e)[:200]}"
+
+# ====================== INTERACTIVE VIEW ======================
+class TipsView(View):
+    def __init__(self, sport: str):
+        super().__init__(timeout=600)  # 10 minutes
+        self.sport = sport
+
+    @discord.ui.button(label="Give Me More", style=discord.ButtonStyle.green, emoji="🔄")
+    async def give_more(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.defer()
+
+        status_msg = await interaction.followup.send("🔄 Getting fresh tips...")
+        
+        analysis = await get_sports_tips(self.sport)
+        
+        config = SPORT_CONFIG.get(self.sport, SPORT_CONFIG["all"])
+        embed = discord.Embed(
+            title=f"{config['emoji']} Fresh Top 4 {config['name']} Tips",
+            description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
+            color=config['color']
+        )
+        embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events.", inline=False)
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
+
+        await interaction.followup.send(embed=embed, view=TipsView(self.sport))
+        
+        try:
+            await status_msg.delete()
+        except:
+            pass
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers")
@@ -131,12 +140,11 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
         color=config['color']
     )
-    
     embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-    
     embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
     
-    await interaction.followup.send(embed=embed)
+    view = TipsView(normalized)
+    await interaction.followup.send(embed=embed, view=view)
     
     try:
         await status_msg.delete()
