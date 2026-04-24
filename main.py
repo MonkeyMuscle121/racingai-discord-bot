@@ -28,13 +28,13 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def get_full_sports_hot_tips():
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=80)  # Tight timeout
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=90)
         
         chat = client.chat.create(
-            model="grok-4.20-reasoning",   # You can try "grok-4-fast-reasoning" if available
+            model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=3,                   # Reduced tool loops
+            max_turns=3,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
@@ -67,10 +67,9 @@ Horse racing: include race time. Football: include kick-off time.
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get top 4 hot sports betting tips")
 async def hot_tips(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)   # Shows "is thinking..."
+    await interaction.response.defer(thinking=True)
     
-    # Immediate second message so Discord doesn't timeout
-    status_msg = await interaction.followup.send("🔍 Analysing real-time sports data...")
+    status_msg = await interaction.followup.send("🔍 Analysing real-time data for UFC, Boxing, Darts, Racing & Football...")
 
     analysis = await get_full_sports_hot_tips()
     
@@ -80,10 +79,11 @@ async def hot_tips(interaction: discord.Interaction):
         color=0xff00ff
     )
     
+    # Safe splitting for long responses
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for i, chunk in enumerate(chunks, 1):
-            embed.add_field(name=f"Part {i}", value=chunk, inline=False)
+            embed.add_field(name=f"Hot Tips (Part {i})", value=chunk, inline=False)
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
@@ -91,7 +91,7 @@ async def hot_tips(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed)
     
-    # Optional: Delete the status message
+    # Clean up status message
     try:
         await status_msg.delete()
     except:
