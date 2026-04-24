@@ -33,8 +33,8 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 LOADING_MESSAGES = [
     "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
     "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 50-80 seconds mate. Stop crying",
-    "🔍 Live data loading... Go touch grass or touch yourself while you wait",
+    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying and wait",
+    "🔍 Live data loading... Go touch grass you melt",
 ]
 
 def get_random_loading_message():
@@ -76,25 +76,23 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
         if bangers_only:
-            extra = "ONLY high confidence tips (80%+ across all sports)."
+            sport_display = "Global Bangers (80%+)"
+            extra = "Search ALL sports and ONLY return HIGH CONFIDENCE tips (80%+)."
         else:
-            extra = ""
+            sport_display = "All Sports" if sport == "all" else ("Horse Racing" if sport == "horse_racing" else sport.replace("_", " ").title())
+            extra = f"Focus only on {sport_display}."
 
         prompt = f"""
 CURRENT TIME: {current_time_str}
 
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. 
-No past or finished events allowed.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
 
 {extra}
 
-Return exactly 4 tips in this format:
-
-**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX% [BAR]  
-→ Savage funny bantery line.
+Return exactly 4 tips.
 """
 
-        chat.append(system("You are a savage Racing AI bot. Strictly follow 48-hour rule. Always show date+time and confidence bar. Keep it funny."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly follow 48-hour rule. Keep it funny with family banter."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -128,14 +126,14 @@ class TipsView(View):
         await interaction.response.defer()
         status = await interaction.followup.send("💣 Loading global bangers...")
         analysis = await get_sports_tips("all", bangers_only=True)
-        embed = discord.Embed(title="💣 Global Bangers (80%+)", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=0xffff00)
+        embed = discord.Embed(title="💣 Global Bangers (80%+ Across All Sports)", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=0xffff00)
         embed.add_field(name="Hot Tips", value=analysis[:3900] or "No high confidence bangers right now.", inline=False)
         embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed, view=TipsView(self.current_sport))
         await status.delete()
 
 # ====================== MAIN COMMAND ======================
-@bot.tree.command(name="tips", description="Get hot tips")
+@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
