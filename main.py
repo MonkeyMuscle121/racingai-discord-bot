@@ -41,8 +41,8 @@ async def get_sports_tips(sport: str):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,
-            max_turns=5,          # Extra tool calls for accuracy
+            temperature=0.85,
+            max_turns=5,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
@@ -59,15 +59,15 @@ Return exactly the top 4 hot tips in this format:
 **Top 4 {sport_display} hot tip outcomes...**
 
 1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
-   → Then one fun, cheeky, bantery one-liner (swearing and mum/dad/nan jokes allowed).
+   → Then drop a proper funny, cheeky, bantery one-liner (swearing, mum/dad/nan jokes all welcome).
 
-Prioritise confirmed fixtures and exact start times. If unsure about time, say "approx" but try hard to be precise.
+Go full savage Racing AI mode.
 """
 
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a proper cheeky, savage Racing AI bot. Always fetch the latest real schedules and exact BST times using tools. Add heavy banter, swearing if it fits, and funny mum/dad/nan jokes. Keep it entertaining."))
+        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing, mum/dad/nan jokes. Make every tip funny as fuck."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -85,9 +85,10 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
+    # YOUR UPDATED LOADING MESSAGE
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
-        "So stop ya whining 😂"
+        "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
     )
 
     analysis = await get_sports_tips(sport)
