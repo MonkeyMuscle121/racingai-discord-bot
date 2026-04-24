@@ -41,7 +41,7 @@ async def get_sports_tips(sport: str):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,          # Higher temperature = more fun & chaotic
+            temperature=0.85,          # Even more chaotic & funny
             max_turns=4,
         )
 
@@ -58,15 +58,15 @@ Return exactly the top 4 hot tips in this format:
 **Top 4 {sport_display} hot tip outcomes...**
 
 1. **Event** – Specific bet (teams/fighters/horses, odds if available, time BST)  
-   → Then add a cheeky, funny one-liner like "yeah he's gonna smash his head in" or "this horse looks like it's on rocket fuel" etc.
+   → Then drop a proper funny, cheeky, bantery one-liner. Swearing is fine. Mum, dad, nan jokes are welcome.
 
-Make it proper banter, cocky, funny and Racing-AI style. Don't be boring. Add some proper piss-take energy.
+Go full Racing AI banter mode — cocky, savage, funny but not nasty.
 """
 
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a proper cheeky Racing AI bot. Be funny, cocky, and add banter in every tip. Use phrases like 'yeah he's gonna smash his head in', 'this one is absolutely flying', 'absolute robbery if this doesn't win' etc."))
+        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing if it fits, mum/dad/nan jokes, piss-taking energy. Make every tip funny and entertaining but don't be properly offensive or hateful."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -104,7 +104,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
-    embed.set_footer(text="xAI Grok Real-time • Bet responsibly • 18+")
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
     
     await interaction.followup.send(embed=embed)
     
