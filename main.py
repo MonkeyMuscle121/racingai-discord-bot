@@ -31,9 +31,9 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 45-70 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 45-70s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 45-70 seconds. Stop crying",
+    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
+    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying",
     "🔍 Live data loading... Go touch grass you melt",
 ]
 
@@ -62,13 +62,13 @@ def clean_response(text: str) -> str:
 
 async def get_sports_tips(sport: str, bangers_only: bool = False):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=90)   # Shorter timeout
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.75,
-            max_turns=4,                 # Reduced for speed & stability
+            temperature=0.82,
+            max_turns=6,
         )
 
         now = datetime.now(pytz.timezone('GMT'))
@@ -76,9 +76,9 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
         if bangers_only:
-            extra = "ONLY show high confidence tips 80%+ from any sport."
+            extra = "ONLY high confidence tips (80%+ across all sports)."
         else:
-            extra = f"Focus only on {sport}."
+            extra = ""
 
         prompt = f"""
 CURRENT TIME: {current_time_str}
@@ -87,10 +87,15 @@ STRICT RULE: ONLY events in the next 48 hours (until {cutoff}).
 
 {extra}
 
-Return exactly 4 upcoming tips.
+Return exactly 4 tips in this exact format:
+
+**1. Event Name** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
+→ Savage funny bantery line.
+
+Always include accurate Date + Time and Confidence % for each tip.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Be fast, funny, and respect the 48-hour rule."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Always include Date + Time BST and Confidence % on every tip. Keep it funny with family banter."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -99,7 +104,7 @@ Return exactly 4 upcoming tips.
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        return f"❌ Error fetching tips. Try again in a minute."
+        return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== INTERACTIVE VIEW ======================
 class TipsView(View):
