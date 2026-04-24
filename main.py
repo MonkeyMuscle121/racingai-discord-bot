@@ -36,13 +36,13 @@ async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
         
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=90)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.85,          # Even more chaotic & funny
-            max_turns=4,
+            temperature=0.8,
+            max_turns=5,          # Extra tool calls for accuracy
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
@@ -51,22 +51,23 @@ async def get_sports_tips(sport: str):
         
         prompt = f"""
 Analyse within the next 48 hours focusing mainly on **{sport}**.
-Date: {date_today}
+Current date: {date_today} (use BST times).
 
+You MUST use tools to get the most accurate, up-to-date schedules.
 Return exactly the top 4 hot tips in this format:
 
 **Top 4 {sport_display} hot tip outcomes...**
 
-1. **Event** – Specific bet (teams/fighters/horses, odds if available, time BST)  
-   → Then drop a proper funny, cheeky, bantery one-liner. Swearing is fine. Mum, dad, nan jokes are welcome.
+1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
+   → Then one fun, cheeky, bantery one-liner (swearing and mum/dad/nan jokes allowed).
 
-Go full Racing AI banter mode — cocky, savage, funny but not nasty.
+Prioritise confirmed fixtures and exact start times. If unsure about time, say "approx" but try hard to be precise.
 """
 
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing if it fits, mum/dad/nan jokes, piss-taking energy. Make every tip funny and entertaining but don't be properly offensive or hateful."))
+        chat.append(system("You are a proper cheeky, savage Racing AI bot. Always fetch the latest real schedules and exact BST times using tools. Add heavy banter, swearing if it fits, and funny mum/dad/nan jokes. Keep it entertaining."))
         chat.append(user(prompt))
 
         response = await chat.sample()
