@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -45,7 +45,8 @@ def normalize_sport(sport: str) -> str:
 
 def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
-    return '\n'.join(line.strip() for line in text.split('\n'))
+    lines = [line.strip() for line in text.split('\n')]
+    return '\n'.join(lines)
 
 async def get_sports_tips(sport: str):
     try:
@@ -54,43 +55,47 @@ async def get_sports_tips(sport: str):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.85,
+            temperature=0.8,
             max_turns=6,
         )
 
-        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+        now = datetime.now(pytz.timezone('GMT'))
+        date_str = now.strftime('%A %d %B %Y %H:%M BST')
+        cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
         if sport == "bangers":
-            sport_display = "Bangers"
+            sport_display = "Bangers 🔥"
             extra = "Only high confidence bangers (80%+)."
         else:
             sport_display = "All Sports" if sport == "all" else ("Horse Racing" if sport == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
         prompt = f"""
-Current date: {date_today} BST. STRICT: Only next 48 hours.
+CURRENT EXACT TIME: {date_str}
+
+STRICT RULE - ONLY EVENTS BETWEEN NOW AND {cutoff} (next 48 hours max). 
+DO NOT include anything that has already started or happened earlier today.
+
+Focus on **{sport}**.
+{extra}
 
 Return exactly 4 tips in this format:
 
-**1. Event** – Bet (odds) | **Date + Time BST** | **Confidence: XX%** [COLOURED BAR]  
+**1. Event** – Bet (odds) | **Date + precise Time BST** | **Confidence: XX%** ███████░░  
 → Savage funny bantery line.
 
-Make the confidence bar visual and coloured:
-- 90%+ = 🔥🔥🔥🔥🔥 RED HOT
-- 75-89% = 🟠🟠🟠🟠🟠 STRONG
-- 60-74% = 🟡🟡🟡🟡🟡 SOLID
-- Below 60% = ⚪⚪⚪⚪⚪
-
-Use mum/dad/nan/grandad/sister/brother jokes. Swearing fine.
+Keep it tight and accurate.
 """
 
-        chat.append(system("""You are a savage, cheeky Racing AI bot. Always show a coloured confidence bar using the exact emoji system above. Make tips funny and entertaining."""))
+        chat.append(system("""You are a savage, cheeky Racing AI bot. 
+STRICTLY only use events in the next 48 hours from now. Always show exact date + time. 
+Heavy banter allowed but never reckless."""))
         
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in next 48 hours."
+        return cleaned or "No upcoming events in the next 48 hours."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -98,4 +103,46 @@ Use mum/dad/nan/grandad/sister/brother jokes. Swearing fine.
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers")
-async def hot_tips(interaction: discord.Interaction, sport
+async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
+    await interaction.response.defer(thinking=True)
+    
+    normalized = normalize_sport(sport)
+    config = SPORT_CONFIG.get(normalized, SPORT_CONFIG["all"])
+    display_name = config["name"]
+    
+    status_msg = await interaction.followup.send(
+        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
+        "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
+    )
+
+    analysis = await get_sports_tips(normalized)
+    
+    embed = discord.Embed(
+        title=f"{config['emoji']} Top 4 {display_name} Hot Tips",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
+        color=config['color']
+    )
+    
+    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in the next 48 hours.", inline=False)
+    
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
+    
+    await interaction.followup.send(embed=embed)
+    
+    try:
+        await status_msg.delete()
+    except:
+        pass
+
+@bot.event
+async def on_ready():
+    print(f"✅ {bot.user} is ONLINE!")
+    try:
+        await bot.tree.sync()
+        print("✅ Slash commands synced")
+    except Exception as e:
+        print(f"Sync warning: {e}")
+    scheduler.start()
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
