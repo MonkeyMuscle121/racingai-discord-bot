@@ -42,7 +42,7 @@ async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
         
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
@@ -53,21 +53,16 @@ async def get_sports_tips(sport: str):
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
-        # Special modes
         if normalized == "bangers":
-            mode = "high confidence bangers"
-            extra = "Only return high confidence tips (80%+). These are your proper bangers."
-        elif normalized == "soon":
-            mode = "soonest starting events"
-            extra = "Focus ONLY on the next 4 events starting SOONEST across all sports in the next 12 hours. Prioritise live or imminent kick-offs/races."
+            sport_display = "Bangers 🔥"
+            extra = "Only return high confidence bangers (80%+). These are your proper strong tips."
         else:
-            mode = sport
+            sport_display = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
-        sport_display = "Bangers" if normalized == "bangers" else ("Soonest Events" if normalized == "soon" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()))
-        
         prompt = f"""
-Current date: {date_today} (BST time).
+Analyse within the next 48 hours focusing mainly on **{sport}**.
+Current date: {date_today} (use BST times).
 {extra}
 
 Return exactly the top 4 hot tips in this format (keep it tight):
@@ -81,7 +76,8 @@ Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing i
 """
 
         chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-Use heavy banter, swearing, family jokes. Keep it very funny but never tell anyone to bet their house or mortgage."""))
+Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother). 
+Keep it very funny but never tell anyone to bet their house or mortgage."""))
         
         chat.append(user(prompt))
 
@@ -94,7 +90,7 @@ Use heavy banter, swearing, family jokes. Keep it very funny but never tell anyo
         return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== SLASH COMMAND ======================
-@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers, /tips soon")
+@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
@@ -102,8 +98,6 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     
     if normalized == "bangers":
         display_name = "Bangers 🔥"
-    elif normalized == "soon":
-        display_name = "Starting Soon ⏰"
     else:
         display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
