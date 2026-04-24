@@ -7,6 +7,7 @@ from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
+import re
 
 # xAI SDK
 from xai_sdk import AsyncClient
@@ -32,6 +33,14 @@ def normalize_sport(sport: str) -> str:
         return "horse_racing"
     return sport_lower
 
+def clean_response(text: str) -> str:
+    """Remove excessive blank lines and clean formatting"""
+    # Replace multiple newlines with max 2
+    text = re.sub(r'\n{3,}', '\n\n', text.strip())
+    # Remove any trailing/leading whitespace per line
+    lines = [line.strip() for line in text.split('\n')]
+    return '\n'.join(lines)
+
 async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
@@ -54,24 +63,25 @@ Analyse within the next 48 hours focusing mainly on **{sport}**.
 Current date: {date_today} (use BST times).
 
 You MUST use tools to get the most accurate, up-to-date schedules.
-Return exactly the top 4 hot tips in this format:
+Return exactly the top 4 hot tips in this format (keep it tight, no big gaps):
 
 **Top 4 {sport_display} hot tip outcomes...**
 
 1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
-   → Then drop a proper funny, cheeky, bantery one-liner (swearing, mum/dad/nan jokes all welcome).
+   → Then one savage, cheeky bantery line.
 
-Go full savage Racing AI mode.
+Go full Racing AI banter mode.
 """
 
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing, mum/dad/nan jokes. Make every tip funny as fuck."))
+        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing, mum/dad/nan jokes. Make every tip funny as fuck. Keep formatting clean and tight."))
         chat.append(user(prompt))
 
         response = await chat.sample()
-        return response.content.strip() or "No tips available."
+        cleaned = clean_response(response.content)
+        return cleaned or "No tips available."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -85,7 +95,6 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
-    # YOUR UPDATED LOADING MESSAGE
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
         "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
