@@ -34,7 +34,7 @@ async def get_full_sports_hot_tips():
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=5,          # Allow tool calls
+            max_turns=5,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
@@ -51,28 +51,25 @@ Return exactly the top 4 hot tips in this format:
 3. ...
 4. ...
 
-Include participants and BST times where possible. Use real-time data only.
+Keep each tip short and concise. Include participants and BST times where possible.
 """
 
-        chat.append(system("You are an expert sports betting analyst. Always use tools for the latest accurate data."))
+        chat.append(system("You are an expert sports betting analyst. Always use tools for the latest accurate data. Keep responses concise."))
         chat.append(user(prompt))
 
-        # Non-streaming sample() - more reliable for Discord
         response = await chat.sample()
         return response.content.strip() or "No content received."
 
-    except asyncio.TimeoutError:
-        return "⏳ Timed out fetching real-time sports data. Try again in a minute."
     except Exception as e:
         logger.error(f"Hot tips error: {e}", exc_info=True)
-        return f"❌ Error: {str(e)[:350]}"
+        return f"❌ Error: {str(e)[:300]}"
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get top 4 hot sports betting tips for next 48h")
 async def hot_tips(interaction: discord.Interaction):
     await interaction.response.defer()
     
-    await interaction.followup.send("🔍 Pulling real-time data for UFC, boxing, darts & horse racing... (may take 30-90 seconds)")
+    await interaction.followup.send("🔍 Pulling real-time data for UFC, boxing, darts & horse racing... (30-90 seconds)")
 
     analysis = await get_full_sports_hot_tips()
     
@@ -81,7 +78,19 @@ async def hot_tips(interaction: discord.Interaction):
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST\n🔥 xAI Grok Real-time",
         color=0xff00ff
     )
-    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No tips available at the moment.", inline=False)
+    
+    # Split long text into multiple fields (Discord max 1024 chars per field)
+    if len(analysis) > 1024:
+        chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
+        for i, chunk in enumerate(chunks, 1):
+            embed.add_field(
+                name=f"Hot Tips (Part {i})", 
+                value=chunk, 
+                inline=False
+            )
+    else:
+        embed.add_field(name="Hot Tips", value=analysis, inline=False)
+    
     embed.set_footer(text="For entertainment only • Bet responsibly • 18+")
     
     await interaction.followup.send(embed=embed)
