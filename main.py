@@ -61,7 +61,7 @@ Return exactly the top 4 hot tips in this format:
 3. ...
 4. ...
 
-Be very specific with names and times (BST).
+Be very specific with names and times (BST). Keep total response concise.
 """
 
         if normalized in ["all", "mixed", "general"]:
@@ -85,7 +85,10 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
-    status_msg = await interaction.followup.send(f"🔍 Analysing real-time **{display_name}** data...")
+    # Updated loading message with time warning
+    status_msg = await interaction.followup.send(
+        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches."
+    )
 
     analysis = await get_sports_tips(sport)
     
@@ -95,10 +98,11 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=0xff00ff
     )
     
+    # Clean splitting - NO "Part 1", "Part 2" labels
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for i, chunk in enumerate(chunks, 1):
-            embed.add_field(name=f"Part {i}", value=chunk, inline=False)
+            embed.add_field(name="", value=chunk, inline=False)   # Empty name = no "Part X"
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
