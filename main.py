@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -45,8 +45,7 @@ def normalize_sport(sport: str) -> str:
 
 def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
-    lines = [line.strip() for line in text.split('\n')]
-    return '\n'.join(lines)
+    return '\n'.join(line.strip() for line in text.split('\n'))
 
 async def get_sports_tips(sport: str):
     try:
@@ -55,13 +54,11 @@ async def get_sports_tips(sport: str):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,
+            temperature=0.85,
             max_turns=6,
         )
 
-        now = datetime.now(pytz.timezone('GMT'))
-        date_str = now.strftime('%A %d %B %Y %H:%M BST')
-        cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
+        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         if sport == "bangers":
             sport_display = "Bangers 🔥"
@@ -71,31 +68,29 @@ async def get_sports_tips(sport: str):
             extra = ""
 
         prompt = f"""
-CURRENT EXACT TIME: {date_str}
-
-STRICT RULE - ONLY EVENTS BETWEEN NOW AND {cutoff} (next 48 hours max). 
-DO NOT include anything that has already started or happened earlier today.
-
-Focus on **{sport}**.
-{extra}
+Current date: {date_today} BST. STRICT: Only next 48 hours.
 
 Return exactly 4 tips in this format:
 
-**1. Event** – Bet (odds) | **Date + precise Time BST** | **Confidence: XX%** ███████░░  
+**1. Event** – Bet (odds) | **Date + Time BST** | **Confidence: XX%** [COLOURED BAR]  
 → Savage funny bantery line.
 
-Keep it tight and accurate.
+Use this exact coloured bar system based on confidence:
+- 0-30%   = 🔵🔵🔵🔵🔵   (Ice Cold)
+- 31-50%  = 🔵🟦🟦🟦⚪
+- 51-70%  = 🟦🟦🟧🟧🟧
+- 71-85%  = 🟧🟧🟧🟥🟥
+- 86-100% = 🟥🟥🟥🟥🟥🔥 RED HOT
+
+Make the bar visual and match the percentage accurately.
 """
 
-        chat.append(system("""You are a savage, cheeky Racing AI bot. 
-STRICTLY only use events in the next 48 hours from now. Always show exact date + time. 
-Heavy banter allowed but never reckless."""))
-        
+        chat.append(system("""You are a savage, cheeky Racing AI bot. Always use the exact coloured confidence bar system above. Keep tips funny with family banter."""))
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in the next 48 hours."
+        return cleaned or "No upcoming events in next 48 hours."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -123,7 +118,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=config['color']
     )
     
-    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in the next 48 hours.", inline=False)
+    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
     
     embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
     
