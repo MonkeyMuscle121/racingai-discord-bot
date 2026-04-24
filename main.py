@@ -42,41 +42,44 @@ async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
         
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.85,
-            max_turns=5,
+            max_turns=6,          # Extra room for accurate scheduling
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
         if normalized == "bangers":
             sport_display = "Bangers 🔥"
-            extra = "Only return high confidence bangers (80%+). These are your proper strong tips."
+            extra = "Only return high confidence bangers (80%+)."
         else:
             sport_display = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
         prompt = f"""
+Current exact date & time: {date_today} BST.
+
+You MUST include accurate date + time for every event (e.g. "Fri 24 Apr - 15:30 BST" or "Sat 25 Apr - 20:00 BST").
+
 Analyse within the next 48 hours focusing mainly on **{sport}**.
-Current date: {date_today} (use BST times).
 {extra}
 
 Return exactly the top 4 hot tips in this format (keep it tight):
 
 **Top 4 {sport_display}...**
 
-1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
+1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **Date + precise time in BST**)  
    → Then one savage, funny, cheeky bantery one-liner.
 
 Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
 """
 
         chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother). 
+Always include exact date + BST time for every event. Use heavy banter, swearing, family jokes. 
 Keep it very funny but never tell anyone to bet their house or mortgage."""))
         
         chat.append(user(prompt))
