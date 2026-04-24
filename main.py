@@ -31,11 +31,10 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 45-75 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Scraping the bookies... This takes 45-75s. Go piss or buy some $GAINZ",
-    "🔍 Loading fresh tips... 45-75 seconds. Stop crying and wait like a big boy",
-    "🔍 Real-time analysis running... Might take 45-75s. Go touch grass you melt",
-    "🔍 Fetching proper bangers... 45-75 seconds. Go buy monkey muscle while you wait",
+    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
+    "🔍 Fetching fresh tips... 50-80 seconds mate. Stop crying",
+    "🔍 Live data loading... Go touch grass or touch yourself while you wait",
 ]
 
 def get_random_loading_message():
@@ -63,13 +62,13 @@ def clean_response(text: str) -> str:
 
 async def get_sports_tips(sport: str, bangers_only: bool = False):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=85)  # Faster timeout
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,
-            max_turns=5,           # Reduced for speed
+            temperature=0.82,
+            max_turns=6,
         )
 
         now = datetime.now(pytz.timezone('GMT'))
@@ -85,14 +84,17 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
 CURRENT TIME: {current_time_str}
 
 STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. 
-NO past or finished events.
+No past or finished events allowed.
 
 {extra}
 
-Return exactly 4 tips.
+Return exactly 4 tips in this format:
+
+**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX% [BAR]  
+→ Savage funny bantery line.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly respect 48-hour rule. Be fast and funny."))
+        chat.append(system("You are a savage Racing AI bot. Strictly follow 48-hour rule. Always show date+time and confidence bar. Keep it funny."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -150,7 +152,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=config['color']
     )
     embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-    embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+ • Bet at your own risk")
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
 
     view = TipsView(normalized)
     await interaction.followup.send(embed=embed, view=view)
