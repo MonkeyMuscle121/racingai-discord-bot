@@ -26,8 +26,16 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-async def get_full_sports_hot_tips():
+def normalize_sport(sport: str) -> str:
+    sport_lower = sport.lower().strip()
+    if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
+        return "horse_racing"
+    return sport_lower
+
+async def get_sports_tips(sport: str):
     try:
+        normalized = normalize_sport(sport)
+        
         client = AsyncClient(api_key=XAI_API_KEY, timeout=90)
         
         chat = client.chat.create(
@@ -39,27 +47,27 @@ async def get_full_sports_hot_tips():
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
+        sport_display = "Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()
+        
         prompt = f"""
-Analyse within the next 48 hours: UFC, boxing, darts, horse racing, and football.
+Analyse within the next 48 hours focusing mainly on **{sport}**.
 Date: {date_today}
 Return exactly the top 4 hot tips in this format:
 
-**Top 4 hot tip outcomes for the next 48 hours...**
+**Top 4 {sport_display} hot tip outcomes...**
 
-1. **Sport/Event** – Specific bet (e.g. Man City vs Arsenal - Man City to win @ 1.85, 15:00 BST)
+1. **Event** – Specific bet (teams/fighters/horses, odds if available, time BST, why hot)
 2. ...
 3. ...
 4. ...
 
-Rules:
-- Always name the teams/players/fighters/horses
-- Include kick-off or race time in BST
-- Include approximate odds if available
-- For football: Always specify the exact match + recommended bet (win, over 2.5, BTTS, etc.)
-- Keep each tip clear and actionable.
+Be very specific with names and times (BST).
 """
 
-        chat.append(system("You are an expert sports betting analyst. Always use real-time data via tools. Be specific with teams, fighters, horses and exact times."))
+        if normalized in ["all", "mixed", "general"]:
+            prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
+
+        chat.append(system("Expert sports betting analyst. Use real-time data via tools. Be specific with matches, fighters, horses and exact times."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -70,16 +78,19 @@ Rules:
         return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== SLASH COMMAND ======================
-@bot.tree.command(name="tips", description="Get top 4 hot sports betting tips")
-async def hot_tips(interaction: discord.Interaction):
+@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
+async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
-    status_msg = await interaction.followup.send("🔍 Analysing real-time data for UFC, Boxing, Darts, Racing & Football...")
+    normalized = normalize_sport(sport)
+    display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
+    
+    status_msg = await interaction.followup.send(f"🔍 Analysing real-time **{display_name}** data...")
 
-    analysis = await get_full_sports_hot_tips()
+    analysis = await get_sports_tips(sport)
     
     embed = discord.Embed(
-        title="🔥 Top 4 Hot Tip Outcomes",
+        title=f"🔥 Top 4 {display_name} Hot Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
@@ -87,7 +98,7 @@ async def hot_tips(interaction: discord.Interaction):
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for i, chunk in enumerate(chunks, 1):
-            embed.add_field(name=f"Hot Tips (Part {i})", value=chunk, inline=False)
+            embed.add_field(name=f"Part {i}", value=chunk, inline=False)
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
