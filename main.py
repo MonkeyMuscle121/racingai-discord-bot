@@ -42,7 +42,7 @@ async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
         
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
@@ -53,15 +53,26 @@ async def get_sports_tips(sport: str):
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
-        sport_display = "Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()
+        # Special modes
+        if normalized == "bangers":
+            mode = "high confidence bangers"
+            extra = "Only return high confidence tips (80%+). These are your proper bangers."
+        elif normalized == "soon":
+            mode = "soonest starting events"
+            extra = "Focus ONLY on the next 4 events starting SOONEST across all sports in the next 12 hours. Prioritise live or imminent kick-offs/races."
+        else:
+            mode = sport
+            extra = ""
+
+        sport_display = "Bangers" if normalized == "bangers" else ("Soonest Events" if normalized == "soon" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()))
         
         prompt = f"""
-Analyse within the next 48 hours focusing mainly on **{sport}**.
-Current date: {date_today} (use BST times).
+Current date: {date_today} (BST time).
+{extra}
 
 Return exactly the top 4 hot tips in this format (keep it tight):
 
-**Top 4 {sport_display} hot tip outcomes...**
+**Top 4 {sport_display}...**
 
 1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
    → Then one savage, funny, cheeky bantery one-liner.
@@ -69,13 +80,8 @@ Return exactly the top 4 hot tips in this format (keep it tight):
 Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
 """
 
-        if normalized in ["all", "mixed", "general"]:
-            prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
-
         chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother), and piss-taking humour. 
-Keep it very funny but **never** tell anyone to bet their house, mortgage, life savings or anything reckless.
-Always keep the vibe fun and light."""))
+Use heavy banter, swearing, family jokes. Keep it very funny but never tell anyone to bet their house or mortgage."""))
         
         chat.append(user(prompt))
 
@@ -88,12 +94,18 @@ Always keep the vibe fun and light."""))
         return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== SLASH COMMAND ======================
-@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
+@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips bangers, /tips soon")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
     normalized = normalize_sport(sport)
-    display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
+    
+    if normalized == "bangers":
+        display_name = "Bangers 🔥"
+    elif normalized == "soon":
+        display_name = "Starting Soon ⏰"
+    else:
+        display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
@@ -103,7 +115,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     analysis = await get_sports_tips(sport)
     
     embed = discord.Embed(
-        title=f"🔥 Top 4 {display_name} Hot Tips",
+        title=f"🔥 Top 4 {display_name}",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
