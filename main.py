@@ -85,9 +85,10 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
-    # Updated loading message with time warning
+    # Updated loading message with your requested humour
     status_msg = await interaction.followup.send(
-        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches."
+        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
+        "So stop ya whining 😂"
     )
 
     analysis = await get_sports_tips(sport)
@@ -98,11 +99,10 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=0xff00ff
     )
     
-    # Clean splitting - NO "Part 1", "Part 2" labels
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
-        for i, chunk in enumerate(chunks, 1):
-            embed.add_field(name="", value=chunk, inline=False)   # Empty name = no "Part X"
+        for chunk in chunks:
+            embed.add_field(name="", value=chunk, inline=False)
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
