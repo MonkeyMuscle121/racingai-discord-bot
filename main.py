@@ -85,7 +85,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
-    # Updated loading message with your requested humour
+    # Final loading message with your exact request
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
         "So stop ya whining 😂"
