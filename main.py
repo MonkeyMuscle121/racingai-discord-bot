@@ -76,26 +76,26 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
         if bangers_only:
-            extra = "ONLY high confidence tips (80%+ across all sports)."
+            sport_display = "Global Bangers"
+            extra = "Search ALL sports and ONLY return HIGH CONFIDENCE tips (80%+)."
         else:
-            extra = ""
+            sport_display = "All Sports" if sport == "all" else ("Horse Racing" if sport == "horse_racing" else sport.replace("_", " ").title())
+            extra = f"ONLY return tips for {sport_display}. Do not mix in other sports."
 
         prompt = f"""
 CURRENT TIME: {current_time_str}
 
-STRICT RULE: ONLY events in the next 48 hours (until {cutoff}).
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
 
 {extra}
 
-Return exactly 4 tips in this exact format:
+Return exactly 4 tips in this format:
 
-**1. Event Name** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
+**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
 → Savage funny bantery line.
-
-Always include accurate Date + Time and Confidence % for each tip.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Always include Date + Time BST and Confidence % on every tip. Keep it funny with family banter."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly follow the requested sport only. Keep it funny."))
         chat.append(user(prompt))
 
         response = await chat.sample()
