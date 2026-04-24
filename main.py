@@ -43,18 +43,18 @@ def normalize_sport(sport: str) -> str:
         return "horse_racing"
     return sport_lower
 
-def get_confidence_bar(percentage: int) -> str:
-    """Creates a visual battery bar with colour gradient"""
-    filled = int(percentage / 10)  # 10 blocks max
+def get_coloured_bar(percentage: int) -> str:
+    """Creates a visual battery bar with blue to red gradient"""
+    filled = max(1, int(percentage / 10))
     empty = 10 - filled
     
     if percentage >= 85:
         bar = "🟥" * filled + "⬛" * empty + " 🔥"
     elif percentage >= 70:
         bar = "🟧" * filled + "⬛" * empty
-    elif percentage >= 50:
+    elif percentage >= 55:
         bar = "🟨" * filled + "⬛" * empty
-    elif percentage >= 30:
+    elif percentage >= 35:
         bar = "🟦" * filled + "⬛" * empty
     else:
         bar = "🔵" * filled + "⬛" * empty
@@ -90,15 +90,15 @@ Current date: {date_today} BST. STRICT: Only next 48 hours.
 
 Return exactly 4 tips in this format:
 
-**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX% [VISUAL BAR]  
+**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX% [BAR]  
 → Savage funny bantery line.
 
-Use visual battery-style bars that fill according to the %.
+Use a visual bar that fills according to the percentage.
 """
 
         chat.append(system("""You are a savage, cheeky Racing AI bot. 
-Always include a visual confidence bar that fills proportionally to the percentage.
-Use the get_confidence_bar style in your mind."""))
+Always show confidence as "Confidence: XX% [visual bar]". 
+Use blue for low, orange for medium, red for high confidence."""))
         
         chat.append(user(prompt))
 
