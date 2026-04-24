@@ -34,10 +34,7 @@ def normalize_sport(sport: str) -> str:
     return sport_lower
 
 def clean_response(text: str) -> str:
-    """Remove excessive blank lines and clean formatting"""
-    # Replace multiple newlines with max 2
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
-    # Remove any trailing/leading whitespace per line
     lines = [line.strip() for line in text.split('\n')]
     return '\n'.join(lines)
 
@@ -62,21 +59,24 @@ async def get_sports_tips(sport: str):
 Analyse within the next 48 hours focusing mainly on **{sport}**.
 Current date: {date_today} (use BST times).
 
-You MUST use tools to get the most accurate, up-to-date schedules.
-Return exactly the top 4 hot tips in this format (keep it tight, no big gaps):
+Return exactly the top 4 hot tips in this format (keep it tight):
 
 **Top 4 {sport_display} hot tip outcomes...**
 
 1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
-   → Then one savage, cheeky bantery line.
+   → Then one savage, funny, cheeky bantery one-liner.
 
-Go full Racing AI banter mode.
+Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
 """
 
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a proper cheeky, savage Racing AI bot. Use heavy banter, swearing, mum/dad/nan jokes. Make every tip funny as fuck. Keep formatting clean and tight."))
+        chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
+Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother), and piss-taking humour. 
+Keep it very funny but **never** tell anyone to bet their house, mortgage, life savings or anything reckless.
+Always keep the vibe fun and light."""))
+        
         chat.append(user(prompt))
 
         response = await chat.sample()
