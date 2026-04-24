@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
 import re
+import random
 
 # xAI SDK
 from xai_sdk import AsyncClient
@@ -27,6 +28,22 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
+
+# Brutal funny loading messages
+LOADING_MESSAGES = [
+    "🔍 Pulling live data... This can take 60-90 seconds. If you can't wait, go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time data... 60-90 seconds mate. Go piss your pants or something while you wait",
+    "🔍 Fetching fresh tips... This takes 60-90 seconds. Go buy some monkey muscle NFTs or some $GAINZ you degenerate",
+    "🔍 Live data incoming... Might take 60-90 seconds. If you're bored go touch grass or touch yourself, whatever",
+    "🔍 Scraping the bookies... 60-90 seconds. Stop crying and go make a cuppa like a big boy",
+    "🔍 Loading proper tips... This ain't instant you melt. Go stare at the wall for 90 seconds",
+    "🔍 Real-time analysis running... 60-90 seconds. Go touch some grass or buy more $GAINZ",
+]
+
+def get_random_loading_message():
+    return random.choice(LOADING_MESSAGES)
+
+# ... (rest of the code stays the same as last stable version)
 
 SPORT_CONFIG = {
     "all": {"emoji": "🔥", "color": 0xff00ff, "name": "All Sports"},
@@ -55,42 +72,31 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,
-            max_turns=7,
+            temperature=0.85,
+            max_turns=6,
         )
 
-        now = datetime.now(pytz.timezone('GMT'))
-        current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
-        cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
+        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         if bangers_only:
-            sport_display = "Global Bangers (80%+)"
             extra = "Search ALL sports and ONLY return HIGH CONFIDENCE tips (80%+)."
-        elif sport == "bangers":
-            sport_display = "Bangers 🔥"
-            extra = "Only high confidence bangers (80%+)."
         else:
-            sport_display = "All Sports" if sport == "all" else ("Horse Racing" if sport == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
         prompt = f"""
-CURRENT EXACT TIME: {current_time_str}
-
-HARD 48-HOUR RULE: ONLY show events that start from NOW until {cutoff}.
-DO NOT show any event that has already started or finished today.
-Ignore all past results completely.
+Current date: {date_today} BST. STRICT: Only next 48 hours.
 
 {extra}
 
-Return exactly 4 upcoming tips.
+Return exactly 4 tips.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Follow the 48-hour future rule strictly. No past or finished events allowed. Keep it funny."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Keep it funny with family banter."))
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in the next 48 hours."
+        return cleaned or "No upcoming events in next 48 hours."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -133,10 +139,9 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     normalized = normalize_sport(sport)
     config = SPORT_CONFIG.get(normalized, SPORT_CONFIG["all"])
     
-    status_msg = await interaction.followup.send(
-        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
-        "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
-    )
+    # Random brutal loading message
+    loading_text = get_random_loading_message()
+    status_msg = await interaction.followup.send(loading_text)
 
     analysis = await get_sports_tips(normalized)
 
