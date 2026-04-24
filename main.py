@@ -28,61 +28,84 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 async def get_full_sports_hot_tips():
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=120)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=80)  # Tight timeout
         
         chat = client.chat.create(
-            model="grok-4.20-reasoning",
+            model="grok-4.20-reasoning",   # You can try "grok-4-fast-reasoning" if available
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=4,
+            max_turns=3,                   # Reduced tool loops
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
         prompt = f"""
-Analyse within the next 48 hours: UFC, boxing, darts, horse racing, and football (soccer).
+Quick analysis for next 48 hours: UFC, boxing, darts, horse racing, football.
 Date: {date_today}
-Return exactly the top 4 hot tips in this format:
+Return ONLY top 4 hot tips. Keep total response short.
 
-**Top 4 hot tip outcomes for the next 48 hours...**
+**Top 4 hot tip outcomes...**
 
-1. **Event** – Outcome (odds if available, time in BST, why hot)
+1. **Event** – Outcome (odds, time BST, why)
 2. ...
 3. ...
 4. ...
 
-For horse racing: Always include race time (e.g. 14:35 Sandown).
-For football: Include league + kick-off time in BST.
-Keep each tip concise.
+Horse racing: include race time. Football: include kick-off time.
 """
 
-        chat.append(system("You are an expert sports betting analyst. Always use tools for real-time data. Be accurate with times in BST."))
+        chat.append(system("Expert sports betting analyst. Use tools quickly. Stay concise."))
         chat.append(user(prompt))
 
         response = await chat.sample()
-        return response.content.strip() or "No tips generated."
+        return response.content.strip() or "No tips available."
 
     except Exception as e:
-        logger.error(f"Hot tips error: {e}", exc_info=True)
-        return f"❌ Error: {str(e)[:250]}"
+        logger.error(f"Error: {e}", exc_info=True)
+        return f"❌ Error fetching tips: {str(e)[:150]}"
 
 # ====================== SLASH COMMAND ======================
-@bot.tree.command(name="tips", description="Get top 4 hot sports betting tips (UFC, Boxing, Darts, Racing, Football)")
+@bot.tree.command(name="tips", description="Get top 4 hot sports betting tips")
 async def hot_tips(interaction: discord.Interaction):
-    await interaction.response.defer()
+    await interaction.response.defer(thinking=True)   # Shows "is thinking..."
     
-    await interaction.followup.send("🔍 Pulling real-time data for UFC, Boxing, Darts, Horse Racing & Football... (30-80s)")
+    # Immediate second message so Discord doesn't timeout
+    status_msg = await interaction.followup.send("🔍 Analysing real-time sports data...")
 
     analysis = await get_full_sports_hot_tips()
     
     embed = discord.Embed(
         title="🔥 Top 4 Hot Tip Outcomes",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST\n🔥 xAI Grok Real-time",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
     
-    # Safe field splitting
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for i, chunk in enumerate(chunks, 1):
-            embed.add_field(name=f"Hot Tips (Part {i})",
+            embed.add_field(name=f"Part {i}", value=chunk, inline=False)
+    else:
+        embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
+    
+    embed.set_footer(text="xAI Grok • Bet responsibly • 18+")
+    
+    await interaction.followup.send(embed=embed)
+    
+    # Optional: Delete the status message
+    try:
+        await status_msg.delete()
+    except:
+        pass
+
+@bot.event
+async def on_ready():
+    print(f"✅ {bot.user} is ONLINE!")
+    try:
+        await bot.tree.sync()
+        print("✅ Slash commands synced")
+    except Exception as e:
+        print(f"Sync warning: {e}")
+    scheduler.start()
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
