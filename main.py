@@ -34,27 +34,32 @@ async def get_full_sports_hot_tips():
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=3,
+            max_turns=4,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
         
         prompt = f"""
-Quick analysis for next 48 hours: UFC, boxing, darts, horse racing, football.
+Analyse within the next 48 hours: UFC, boxing, darts, horse racing, and football.
 Date: {date_today}
-Return ONLY top 4 hot tips. Keep total response short.
+Return exactly the top 4 hot tips in this format:
 
-**Top 4 hot tip outcomes...**
+**Top 4 hot tip outcomes for the next 48 hours...**
 
-1. **Event** – Outcome (odds, time BST, why)
+1. **Sport/Event** – Specific bet (e.g. Man City vs Arsenal - Man City to win @ 1.85, 15:00 BST)
 2. ...
 3. ...
 4. ...
 
-Horse racing: include race time. Football: include kick-off time.
+Rules:
+- Always name the teams/players/fighters/horses
+- Include kick-off or race time in BST
+- Include approximate odds if available
+- For football: Always specify the exact match + recommended bet (win, over 2.5, BTTS, etc.)
+- Keep each tip clear and actionable.
 """
 
-        chat.append(system("Expert sports betting analyst. Use tools quickly. Stay concise."))
+        chat.append(system("You are an expert sports betting analyst. Always use real-time data via tools. Be specific with teams, fighters, horses and exact times."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -62,7 +67,7 @@ Horse racing: include race time. Football: include kick-off time.
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        return f"❌ Error fetching tips: {str(e)[:150]}"
+        return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get top 4 hot sports betting tips")
@@ -79,7 +84,6 @@ async def hot_tips(interaction: discord.Interaction):
         color=0xff00ff
     )
     
-    # Safe splitting for long responses
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for i, chunk in enumerate(chunks, 1):
@@ -87,11 +91,10 @@ async def hot_tips(interaction: discord.Interaction):
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
     
-    embed.set_footer(text="xAI Grok • Bet responsibly • 18+")
+    embed.set_footer(text="xAI Grok Real-time • Bet responsibly • 18+")
     
     await interaction.followup.send(embed=embed)
     
-    # Clean up status message
     try:
         await status_msg.delete()
     except:
