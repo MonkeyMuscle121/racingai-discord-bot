@@ -48,24 +48,23 @@ async def get_sports_tips(sport: str):
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.85,
-            max_turns=6,          # Extra room for accurate scheduling
+            max_turns=6,
         )
 
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
-        
+
         if normalized == "bangers":
             sport_display = "Bangers 🔥"
-            extra = "Only return high confidence bangers (80%+)."
+            extra = "Only return HIGH CONFIDENCE bangers (80%+)."
         else:
             sport_display = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
         prompt = f"""
-Current exact date & time: {date_today} BST.
+STRICT RULE: ONLY events happening in the NEXT 48 HOURS from now ({date_today} BST). 
+Ignore anything older or further away.
 
-You MUST include accurate date + time for every event (e.g. "Fri 24 Apr - 15:30 BST" or "Sat 25 Apr - 20:00 BST").
-
-Analyse within the next 48 hours focusing mainly on **{sport}**.
+Analyse focusing mainly on **{sport}**.
 {extra}
 
 Return exactly the top 4 hot tips in this format (keep it tight):
@@ -79,14 +78,14 @@ Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing i
 """
 
         chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-Always include exact date + BST time for every event. Use heavy banter, swearing, family jokes. 
-Keep it very funny but never tell anyone to bet their house or mortgage."""))
+STRICTLY only use events in the next 48 hours. Always include exact date + BST time.
+Use heavy banter, swearing, family jokes. Keep it very funny but never reckless."""))
         
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No tips available."
+        return cleaned or "No upcoming events in next 48 hours."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -122,7 +121,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         for chunk in chunks:
             embed.add_field(name="", value=chunk, inline=False)
     else:
-        embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
+        embed.add_field(name="Hot Tips", value=analysis or "No upcoming events in next 48 hours.", inline=False)
     
     embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
     
