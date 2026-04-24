@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -55,15 +55,17 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.85,
-            max_turns=6,
+            temperature=0.8,
+            max_turns=7,
         )
 
-        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+        now = datetime.now(pytz.timezone('GMT'))
+        current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
+        cutoff_time = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
         if bangers_only:
             sport_display = "Global Bangers (80%+)"
-            extra = "Search ALL sports and return only HIGH CONFIDENCE bangers (80%+ confidence)."
+            extra = "Search ALL sports and ONLY return HIGH CONFIDENCE tips (80%+)."
         elif sport == "bangers":
             sport_display = "Bangers 🔥"
             extra = "Only high confidence bangers (80%+)."
@@ -72,25 +74,26 @@ async def get_sports_tips(sport: str, bangers_only: bool = False):
             extra = ""
 
         prompt = f"""
-CURRENT TIME: {date_today} BST
+CURRENT EXACT TIME: {current_time_str}
 
-STRICT RULE: ONLY events happening in the NEXT 48 HOURS from now. 
-Ignore anything that has already happened or started earlier today.
+STRICT 48-HOUR RULE: ONLY include events that start between NOW and {cutoff_time}.
+DO NOT include any event that has already started or finished.
+Ignore past results completely.
 
 {extra}
 
-Return exactly 4 tips in this format:
+Return exactly 4 upcoming tips in this format:
 
 **1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
 → Savage funny bantery line.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly respect the 48-hour rule. Keep it funny with family banter."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly follow the 48-hour future rule. No past events allowed. Keep it funny with family banter."))
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in next 48 hours."
+        return cleaned or "No upcoming events in the next 48 hours."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -106,18 +109,11 @@ class TipsView(View):
     async def give_more(self, interaction: discord.Interaction, button: Button):
         await interaction.response.defer()
         status = await interaction.followup.send("🔄 Getting fresh tips...")
-        
         analysis = await get_sports_tips(self.current_sport, bangers_only=False)
-        
         config = SPORT_CONFIG.get(self.current_sport, SPORT_CONFIG["all"])
-        embed = discord.Embed(
-            title=f"{config['emoji']} Fresh {config['name']} Tips",
-            description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
-            color=config['color']
-        )
+        embed = discord.Embed(title=f"{config['emoji']} Fresh {config['name']} Tips", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=config['color'])
         embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events.", inline=False)
         embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        
         await interaction.followup.send(embed=embed, view=TipsView(self.current_sport))
         await status.delete()
 
@@ -125,17 +121,10 @@ class TipsView(View):
     async def show_bangers(self, interaction: discord.Interaction, button: Button):
         await interaction.response.defer()
         status = await interaction.followup.send("💣 Loading global high confidence bangers...")
-
-        analysis = await get_sports_tips("all", bangers_only=True)   # Global bangers
-        
-        embed = discord.Embed(
-            title="💣 Global Bangers (80%+ Across All Sports)",
-            description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
-            color=0xffff00
-        )
+        analysis = await get_sports_tips("all", bangers_only=True)
+        embed = discord.Embed(title="💣 Global Bangers (80%+ Across All Sports)", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=0xffff00)
         embed.add_field(name="Hot Tips", value=analysis[:3900] or "No high confidence bangers right now.", inline=False)
         embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        
         await interaction.followup.send(embed=embed, view=TipsView(self.current_sport))
         await status.delete()
 
@@ -160,7 +149,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=config['color']
     )
     embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-    embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+ • Bet at your own risk")
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
 
     view = TipsView(normalized)
     await interaction.followup.send(embed=embed, view=view)
