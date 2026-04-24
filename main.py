@@ -27,6 +27,17 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
+# Sport Emojis & Colours
+SPORT_CONFIG = {
+    "all": {"emoji": "🔥", "color": 0xff00ff},
+    "football": {"emoji": "⚽", "color": 0x00ff88},
+    "horse_racing": {"emoji": "🐎", "color": 0xffaa00},
+    "ufc": {"emoji": "🥊", "color": 0xff0000},
+    "boxing": {"emoji": "🥊", "color": 0xff0000},
+    "darts": {"emoji": "🎯", "color": 0x00aaff},
+    "bangers": {"emoji": "💣", "color": 0xffff00},
+}
+
 def normalize_sport(sport: str) -> str:
     sport_lower = sport.lower().strip()
     if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
@@ -54,38 +65,36 @@ async def get_sports_tips(sport: str):
         date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
 
         if normalized == "bangers":
-            sport_display = "Bangers 🔥"
-            extra = "Only return HIGH CONFIDENCE bangers (80%+)."
+            sport_display = "Bangers"
+            extra = "Only high confidence bangers (80%+)."
         else:
             sport_display = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
             extra = ""
 
         prompt = f"""
-STRICT RULE: ONLY events happening in the NEXT 48 HOURS from now ({date_today} BST). 
-Ignore anything older or further away.
+Current date: {date_today} BST.
 
-Analyse focusing mainly on **{sport}**.
-{extra}
+STRICT: Only events in the next 48 hours.
 
-Return exactly the top 4 hot tips in this format (keep it tight):
+Return exactly 4 tips with this exact structure for each:
 
-**Top 4 {sport_display}...**
+**1. Event Name** – Bet (odds) | **Date + Time BST** | **Confidence: XX%** ███████░░  
+→ Savage funny bantery line here.
 
-1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **Date + precise time in BST**)  
-   → Then one savage, funny, cheeky bantery one-liner.
-
-Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
+Use mum/dad/nan/grandad/sister/brother jokes, swearing ok. Keep it fun.
 """
 
-        chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-STRICTLY only use events in the next 48 hours. Always include exact date + BST time.
-Use heavy banter, swearing, family jokes. Keep it very funny but never reckless."""))
+        if normalized in ["all", "mixed", "general"]:
+            prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
+
+        chat.append(system("""You are a savage, cheeky Racing AI bot. Always include Confidence % and a visual bar (e.g. ███████░░ 75%). 
+Make tips funny with family banter but never reckless."""))
         
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in next 48 hours."
+        return cleaned or "No upcoming events."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
@@ -97,11 +106,9 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
     normalized = normalize_sport(sport)
+    config = SPORT_CONFIG.get(normalized, SPORT_CONFIG["all"])
     
-    if normalized == "bangers":
-        display_name = "Bangers 🔥"
-    else:
-        display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
+    display_name = "Bangers" if normalized == "bangers" else ("All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()))
     
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
@@ -111,9 +118,9 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     analysis = await get_sports_tips(sport)
     
     embed = discord.Embed(
-        title=f"🔥 Top 4 {display_name}",
+        title=f"{config['emoji']} Top 4 {display_name} Hot Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
-        color=0xff00ff
+        color=config['color']
     )
     
     if len(analysis) > 1000:
