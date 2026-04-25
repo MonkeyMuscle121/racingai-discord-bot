@@ -29,9 +29,9 @@ scheduler = AsyncIOScheduler(timezone="Europe/London")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying",
+    "🔍 Pulling live data... 40-65 seconds. Go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 40-65s. Go piss or buy some $GAINZ",
+    "🔍 Fetching fresh tips... 40-65 seconds. Stop crying",
     "🔍 Live data loading... Go touch grass you melt",
 ]
 
@@ -50,13 +50,13 @@ def clean_response(text: str) -> str:
 
 async def get_sports_tips(sport: str):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=75)   # Faster timeout
         
         chat = client.chat.create(
-            model="grok-4.20-reasoning",
+            model="grok-4.20-reasoning",   # You can try "grok-4-fast-reasoning" if available on your key
             tools=[web_search(), x_search()],
             temperature=0.75,
-            max_turns=6,
+            max_turns=4,                   # Reduced for speed
         )
 
         now = datetime.now(pytz.timezone('Europe/London'))
@@ -72,22 +72,12 @@ STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past event
 
 Focus ONLY on **{sport}**.
 
-For horse racing: You MUST only use real declared runners from actual upcoming meetings. 
-Do not invent or suggest any horse that is not in the current racecard.
+For horse racing: Use real declared runners only.
 
-Return exactly 4 tips in this format:
-
-**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
-→ Savage funny bantery line.
+Return exactly 4 tips.
 """
 
-        if normalize_sport(sport) in ["all", "mixed", "general"]:
-            prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
-
-        chat.append(system("""You are a savage, cheeky Racing AI bot. 
-For horse racing you MUST only use real declared runners from current/future meetings. 
-Do not hallucinate horses. Always include accurate Date + Time BST and Confidence %."""))
-        
+        chat.append(system("You are a savage, cheeky Racing AI bot. Be fast and funny."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -102,26 +92,26 @@ Do not hallucinate horses. Always include accurate Date + Time BST and Confidenc
 @bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
-   
+  
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
-   
+  
     status_msg = await interaction.followup.send(get_random_loading_message())
-    
-    analysis = await get_sports_tips(sport)
    
+    analysis = await get_sports_tips(sport)
+  
     embed = discord.Embed(
         title=f"🔥 Top 4 {display_name} Hot Tips",
         description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
-   
+  
     embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-   
+  
     embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
-   
+  
     await interaction.followup.send(embed=embed)
-   
+  
     try:
         await status_msg.delete()
     except:
