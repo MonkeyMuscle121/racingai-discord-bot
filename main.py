@@ -66,15 +66,15 @@ async def get_sports_tips(sport: str):
         sport_display = "Horse Racing" if normalize_sport(sport) == "horse_racing" else sport.replace("_", " ").title()
 
         prompt = f"""
-CURRENT TIME: {current_time_str}
+CURRENT EXACT TIME: {current_time_str}
 
-STRICT 48 HOUR RULE: ONLY events in the next 48 hours.
+HARD RULE: ONLY include races/events that have NOT started yet and are within the next 48 hours (until {cutoff}).
 
 Focus ONLY on **{sport}**.
 
-For horse racing: ONLY use real current runners from actual meetings. Do not invent horses that are not declared.
+For horse racing: Only use races that are still to be run. Do not include any race that has already finished or is currently running.
 
-Return exactly 4 tips in this format:
+Return exactly 4 upcoming tips in this format:
 
 **1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
 → Savage funny bantery line.
@@ -84,8 +84,9 @@ Return exactly 4 tips in this format:
             prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
 
         chat.append(system("""You are a savage, cheeky Racing AI bot. 
-For horse racing you MUST only use real declared runners from current meetings. 
-Always include accurate Date + Time BST and Confidence %. Keep it funny."""))
+Strictly only use future events that have not started yet. 
+For horse racing, only include races that are still upcoming with declared runners. 
+Always include accurate Date + Time BST."""))
         
         chat.append(user(prompt))
 
