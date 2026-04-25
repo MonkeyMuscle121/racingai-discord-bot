@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
 import re
+import random
 
 # xAI SDK
 from xai_sdk import AsyncClient
@@ -41,29 +42,34 @@ def clean_response(text: str) -> str:
 async def get_sports_tips(sport: str):
     try:
         normalized = normalize_sport(sport)
-        
+       
         client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
-        
+       
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.85,
-            max_turns=5,
+            temperature=0.82,
+            max_turns=6,
         )
+        
+        now = datetime.now(pytz.timezone('GMT'))
+        current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
+        cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
-        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
-        
         sport_display = "Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()
-        
+       
         prompt = f"""
-Analyse within the next 48 hours focusing mainly on **{sport}**.
-Current date: {date_today} (use BST times).
+CURRENT TIME: {current_time_str}
+
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
+
+Focus mainly on **{sport}**.
 
 Return exactly the top 4 hot tips in this format (keep it tight):
 
 **Top 4 {sport_display} hot tip outcomes...**
 
-1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
+1. **Event** – Specific bet (exact teams/fighters/horses, odds if available) | **Date + Time BST** | Confidence: XX%  
    → Then one savage, funny, cheeky bantery one-liner.
 
 Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
@@ -72,13 +78,12 @@ Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing i
         if normalized in ["all", "mixed", "general"]:
             prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
-Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother), and piss-taking humour. 
-Keep it very funny but **never** tell anyone to bet their house, mortgage, life savings or anything reckless.
-Always keep the vibe fun and light."""))
-        
+        chat.append(system("""You are a proper savage, cheeky Racing AI bot.
+Always include accurate Date + Time BST and Confidence % on every tip.
+Use heavy banter, swearing, family jokes. Keep it very funny but never reckless."""))
+       
         chat.append(user(prompt))
-
+        
         response = await chat.sample()
         cleaned = clean_response(response.content)
         return cleaned or "No tips available."
@@ -91,34 +96,34 @@ Always keep the vibe fun and light."""))
 @bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
-    
+   
     normalized = normalize_sport(sport)
     display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
-    
+   
     status_msg = await interaction.followup.send(
         "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
         "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
     )
-
-    analysis = await get_sports_tips(sport)
     
+    analysis = await get_sports_tips(sport)
+   
     embed = discord.Embed(
         title=f"🔥 Top 4 {display_name} Hot Tips",
         description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
-    
+   
     if len(analysis) > 1000:
         chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
         for chunk in chunks:
             embed.add_field(name="", value=chunk, inline=False)
     else:
         embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
-    
+   
     embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
-    
+   
     await interaction.followup.send(embed=embed)
-    
+   
     try:
         await status_msg.delete()
     except:
