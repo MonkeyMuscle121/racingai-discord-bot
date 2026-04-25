@@ -29,9 +29,9 @@ scheduler = AsyncIOScheduler(timezone="Europe/London")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 40-65 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 40-65s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 40-65 seconds. Stop crying",
+    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
+    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying",
     "🔍 Live data loading... Go touch grass you melt",
 ]
 
@@ -50,13 +50,13 @@ def clean_response(text: str) -> str:
 
 async def get_sports_tips(sport: str):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=80)   # Faster timeout
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.78,
-            max_turns=4,                    # Reduced for speed
+            temperature=0.75,
+            max_turns=6,
         )
 
         now = datetime.now(pytz.timezone('Europe/London'))
@@ -68,13 +68,12 @@ async def get_sports_tips(sport: str):
         prompt = f"""
 CURRENT EXACT TIME: {current_time_str}
 
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. 
-No past or finished events allowed.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
 
 Focus ONLY on **{sport}**.
 
 For horse racing: You MUST only use real declared runners from actual upcoming meetings. 
-Do not invent horses.
+Do not invent or suggest any horse that is not in the current racecard.
 
 Return exactly 4 tips in this format:
 
@@ -85,7 +84,10 @@ Return exactly 4 tips in this format:
         if normalize_sport(sport) in ["all", "mixed", "general"]:
             prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Be fast. Strictly follow 48-hour rule and real runners only."))
+        chat.append(system("""You are a savage, cheeky Racing AI bot. 
+For horse racing you MUST only use real declared runners from current/future meetings. 
+Do not hallucinate horses. Always include accurate Date + Time BST and Confidence %."""))
+        
         chat.append(user(prompt))
 
         response = await chat.sample()
