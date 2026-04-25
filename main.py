@@ -25,7 +25,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
-scheduler = AsyncIOScheduler(timezone="Europe/London")  # Better for BST
+scheduler = AsyncIOScheduler(timezone="Europe/London")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
@@ -55,11 +55,11 @@ async def get_sports_tips(sport: str):
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.8,
+            temperature=0.75,
             max_turns=6,
         )
 
-        now = datetime.now(pytz.timezone('Europe/London'))  # Proper BST handling
+        now = datetime.now(pytz.timezone('Europe/London'))
         current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
@@ -68,10 +68,12 @@ async def get_sports_tips(sport: str):
         prompt = f"""
 CURRENT EXACT TIME: {current_time_str}
 
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. 
-No past or finished events allowed.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
 
 Focus ONLY on **{sport}**.
+
+For horse racing: You MUST only use real declared runners from actual upcoming meetings. 
+Do not invent or suggest any horse that is not in the current racecard.
 
 Return exactly 4 tips in this format:
 
@@ -79,7 +81,13 @@ Return exactly 4 tips in this format:
 → Savage funny bantery line.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly respect the 48-hour future rule. Always show accurate Date + Time BST."))
+        if normalize_sport(sport) in ["all", "mixed", "general"]:
+            prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
+
+        chat.append(system("""You are a savage, cheeky Racing AI bot. 
+For horse racing you MUST only use real declared runners from current/future meetings. 
+Do not hallucinate horses. Always include accurate Date + Time BST and Confidence %."""))
+        
         chat.append(user(prompt))
 
         response = await chat.sample()
