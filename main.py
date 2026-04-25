@@ -25,7 +25,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
-scheduler = AsyncIOScheduler(timezone="GMT")
+scheduler = AsyncIOScheduler(timezone="Europe/London")  # Better for BST
 
 # Brutal loading messages
 LOADING_MESSAGES = [
@@ -59,7 +59,7 @@ async def get_sports_tips(sport: str):
             max_turns=6,
         )
 
-        now = datetime.now(pytz.timezone('GMT'))
+        now = datetime.now(pytz.timezone('Europe/London'))  # Proper BST handling
         current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
 
@@ -68,26 +68,18 @@ async def get_sports_tips(sport: str):
         prompt = f"""
 CURRENT EXACT TIME: {current_time_str}
 
-HARD RULE: ONLY include races/events that have NOT started yet and are within the next 48 hours (until {cutoff}).
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. 
+No past or finished events allowed.
 
 Focus ONLY on **{sport}**.
 
-For horse racing: Only use races that are still to be run. Do not include any race that has already finished or is currently running.
-
-Return exactly 4 upcoming tips in this format:
+Return exactly 4 tips in this format:
 
 **1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
 → Savage funny bantery line.
 """
 
-        if normalize_sport(sport) in ["all", "mixed", "general"]:
-            prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
-
-        chat.append(system("""You are a savage, cheeky Racing AI bot. 
-Strictly only use future events that have not started yet. 
-For horse racing, only include races that are still upcoming with declared runners. 
-Always include accurate Date + Time BST."""))
-        
+        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly respect the 48-hour future rule. Always show accurate Date + Time BST."))
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -112,7 +104,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
    
     embed = discord.Embed(
         title=f"🔥 Top 4 {display_name} Hot Tips",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
+        description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
    
