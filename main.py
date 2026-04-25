@@ -127,3 +127,16 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         await status_msg.delete()
     except:
         pass
+
+@bot.event
+async def on_ready():
+    print(f"✅ {bot.user} is ONLINE!")
+    try:
+        await bot.tree.sync()
+        print("✅ Slash commands synced")
+    except Exception as e:
+        print(f"Sync warning: {e}")
+    scheduler.start()
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
