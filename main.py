@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import asyncio
 import logging
 import re
 import random
@@ -30,9 +29,9 @@ scheduler = AsyncIOScheduler(timezone="GMT")
 
 # Brutal loading messages
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 35-65 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 35-65s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 35-65 seconds. Stop crying",
+    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
+    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying",
     "🔍 Live data loading... Go touch grass you melt",
 ]
 
@@ -51,13 +50,13 @@ def clean_response(text: str) -> str:
 
 async def get_sports_tips(sport: str):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=75)  # Faster timeout
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
         
         chat = client.chat.create(
-            model="grok-4.20-reasoning",   # Try "grok-4-fast-reasoning" if you have access
+            model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.75,
-            max_turns=4,                   # Reduced for speed
+            temperature=0.8,
+            max_turns=6,
         )
 
         now = datetime.now(pytz.timezone('GMT'))
@@ -67,16 +66,28 @@ async def get_sports_tips(sport: str):
         sport_display = "Horse Racing" if normalize_sport(sport) == "horse_racing" else sport.replace("_", " ").title()
 
         prompt = f"""
-CURRENT TIME: {current_time_str}
+CURRENT EXACT TIME: {current_time_str}
 
-STRICT 48 HOUR RULE: ONLY events from now until {cutoff}.
+HARD 48-HOUR RULE: ONLY events/races/meetings starting from NOW until {cutoff}.
+DO NOT include any past or finished events.
 
-Focus only on **{sport}**.
+Focus ONLY on **{sport}**.
 
-Return exactly 4 tips.
+For horse racing: Use real current runners and meetings only. Do not invent horses.
+
+Return exactly 4 tips in this format:
+
+**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
+→ Savage funny bantery line.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Be fast. Keep it funny."))
+        if normalize_sport(sport) in ["all", "mixed", "general"]:
+            prompt = prompt.replace("Focus ONLY on **all**", "UFC, boxing, darts, horse racing, and football")
+
+        chat.append(system("""You are a savage, cheeky Racing AI bot. 
+Strictly follow the 48-hour rule and only use real current runners for horse racing. 
+Always include accurate Date + Time and Confidence %. Keep it funny."""))
+        
         chat.append(user(prompt))
 
         response = await chat.sample()
@@ -85,7 +96,7 @@ Return exactly 4 tips.
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        return f"❌ Error fetching tips: {str(e)[:150]}"
+        return f"❌ Error fetching tips: {str(e)[:200]}"
 
 # ====================== SLASH COMMAND ======================
 @bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
@@ -107,7 +118,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
    
     embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
    
-    embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+ • Bet at your own risk")
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
    
     await interaction.followup.send(embed=embed)
    
@@ -128,4 +139,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
-    
