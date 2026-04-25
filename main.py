@@ -1,15 +1,13 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from discord.ui import Button, View
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import logging
 import re
-import random
 
 # xAI SDK
 from xai_sdk import AsyncClient
@@ -29,27 +27,6 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="GMT")
 
-# Brutal loading messages
-LOADING_MESSAGES = [
-    "🔍 Pulling live data... 50-80 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 50-80s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 50-80 seconds. Stop crying",
-    "🔍 Live data loading... Go touch grass you melt",
-]
-
-def get_random_loading_message():
-    return random.choice(LOADING_MESSAGES)
-
-SPORT_CONFIG = {
-    "all": {"emoji": "🔥", "color": 0xff00ff, "name": "All Sports"},
-    "football": {"emoji": "⚽", "color": 0x00ff88, "name": "Football"},
-    "horse_racing": {"emoji": "🐎", "color": 0xffaa00, "name": "Horse Racing"},
-    "ufc": {"emoji": "🥊", "color": 0xff0000, "name": "UFC"},
-    "boxing": {"emoji": "🥊", "color": 0xff0000, "name": "Boxing"},
-    "darts": {"emoji": "🎯", "color": 0x00aaff, "name": "Darts"},
-    "bangers": {"emoji": "💣", "color": 0xffff00, "name": "Bangers"},
-}
-
 def normalize_sport(sport: str) -> str:
     sport_lower = sport.lower().strip()
     if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
@@ -58,105 +35,89 @@ def normalize_sport(sport: str) -> str:
 
 def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
-    return '\n'.join(line.strip() for line in text.split('\n'))
+    lines = [line.strip() for line in text.split('\n')]
+    return '\n'.join(lines)
 
-async def get_sports_tips(sport: str, bangers_only: bool = False):
+async def get_sports_tips(sport: str):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=110)
+        normalized = normalize_sport(sport)
+        
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=100)
         
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.82,
-            max_turns=6,
+            temperature=0.85,
+            max_turns=5,
         )
 
-        now = datetime.now(pytz.timezone('GMT'))
-        current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
-        cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
-
-        if bangers_only:
-            sport_display = "Global Bangers"
-            extra = "Search ALL sports and ONLY return HIGH CONFIDENCE tips (80%+)."
-        else:
-            sport_display = "All Sports" if sport == "all" else ("Horse Racing" if sport == "horse_racing" else sport.replace("_", " ").title())
-            extra = f"ONLY return tips for {sport_display}. Do not mix in other sports."
-
+        date_today = datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y')
+        
+        sport_display = "Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title()
+        
         prompt = f"""
-CURRENT TIME: {current_time_str}
+Analyse within the next 48 hours focusing mainly on **{sport}**.
+Current date: {date_today} (use BST times).
 
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
+Return exactly the top 4 hot tips in this format (keep it tight):
 
-{extra}
+**Top 4 {sport_display} hot tip outcomes...**
 
-Return exactly 4 tips in this format:
+1. **Event** – Specific bet (exact teams/fighters/horses, odds if available, **precise time in BST**)  
+   → Then one savage, funny, cheeky bantery one-liner.
 
-**1. Event** – Bet (odds) | **Date + Time BST** | Confidence: XX%  
-→ Savage funny bantery line.
+Use mum, dad, nan, grandad, sister, brother jokes and general humour. Swearing is fine.
 """
 
-        chat.append(system("You are a savage, cheeky Racing AI bot. Strictly follow the requested sport only. Keep it funny."))
+        if normalized in ["all", "mixed", "general"]:
+            prompt = prompt.replace("focusing mainly on **all**", "UFC, boxing, darts, horse racing, and football")
+
+        chat.append(system("""You are a proper savage, cheeky Racing AI bot. 
+Use heavy banter, swearing, family jokes (mum, dad, nan, grandad, sister, brother), and piss-taking humour. 
+Keep it very funny but **never** tell anyone to bet their house, mortgage, life savings or anything reckless.
+Always keep the vibe fun and light."""))
+        
         chat.append(user(prompt))
 
         response = await chat.sample()
         cleaned = clean_response(response.content)
-        return cleaned or "No upcoming events in next 48 hours."
+        return cleaned or "No tips available."
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         return f"❌ Error fetching tips: {str(e)[:200]}"
 
-# ====================== INTERACTIVE VIEW ======================
-class TipsView(View):
-    def __init__(self, current_sport: str):
-        super().__init__(timeout=600)
-        self.current_sport = current_sport
-
-    @discord.ui.button(label="Give Me More", style=discord.ButtonStyle.green, emoji="🔄")
-    async def give_more(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
-        status = await interaction.followup.send("🔄 Getting fresh tips...")
-        analysis = await get_sports_tips(self.current_sport, bangers_only=False)
-        config = SPORT_CONFIG.get(self.current_sport, SPORT_CONFIG["all"])
-        embed = discord.Embed(title=f"{config['emoji']} Fresh {config['name']} Tips", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=config['color'])
-        embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events.", inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        await interaction.followup.send(embed=embed, view=TipsView(self.current_sport))
-        await status.delete()
-
-    @discord.ui.button(label="Bangers (80%+)", style=discord.ButtonStyle.red, emoji="💣")
-    async def show_bangers(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
-        status = await interaction.followup.send("💣 Loading global bangers...")
-        analysis = await get_sports_tips("all", bangers_only=True)
-        embed = discord.Embed(title="💣 Global Bangers (80%+)", description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST", color=0xffff00)
-        embed.add_field(name="Hot Tips", value=analysis[:3900] or "No high confidence bangers right now.", inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        await interaction.followup.send(embed=embed, view=TipsView(self.current_sport))
-        await status.delete()
-
-# ====================== MAIN COMMAND ======================
-@bot.tree.command(name="tips", description="Get hot tips")
+# ====================== SLASH COMMAND ======================
+@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     
     normalized = normalize_sport(sport)
-    config = SPORT_CONFIG.get(normalized, SPORT_CONFIG["all"])
+    display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
     
-    status_msg = await interaction.followup.send(get_random_loading_message())
-
-    analysis = await get_sports_tips(normalized)
-
-    embed = discord.Embed(
-        title=f"{config['emoji']} Top 4 {config['name']} Hot Tips",
-        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
-        color=config['color']
+    status_msg = await interaction.followup.send(
+        "🔍 Analysing real-time data... **This can take approx 60 seconds** due to live searches.\n"
+        "So stop ya whining 😂 and go and buy a monkey or some gainz while you wait — awesome shit like this don't come for free!"
     )
-    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-    embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+ • Bet at your own risk")
 
-    view = TipsView(normalized)
-    await interaction.followup.send(embed=embed, view=view)
+    analysis = await get_sports_tips(sport)
+    
+    embed = discord.Embed(
+        title=f"🔥 Top 4 {display_name} Hot Tips",
+        description=f"📅 {datetime.now(pytz.timezone('GMT')).strftime('%A %d %B %Y %H:%M')} BST",
+        color=0xff00ff
+    )
+    
+    if len(analysis) > 1000:
+        chunks = [analysis[i:i+1000] for i in range(0, len(analysis), 1000)]
+        for chunk in chunks:
+            embed.add_field(name="", value=chunk, inline=False)
+    else:
+        embed.add_field(name="Hot Tips", value=analysis or "No data at the moment.", inline=False)
+    
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+ • Bet at your own risk")
+    
+    await interaction.followup.send(embed=embed)
     
     try:
         await status_msg.delete()
