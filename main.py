@@ -52,7 +52,8 @@ def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return '\n'.join(line.strip() for line in text.split('\n'))
 
-def save_tips(sport: str, tips_text: str):
+# ====================== SAVE / LOAD ======================
+def save_tips(sport: str, tips_text: str, raw_tips: list):
     try:
         data = {}
         if TIPS_FILE.exists():
@@ -63,7 +64,9 @@ def save_tips(sport: str, tips_text: str):
         data[key] = {
             "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
             "sport": sport,
-            "tips": tips_text
+            "raw_text": tips_text,
+            "tips": raw_tips,           # List of individual tips
+            "last_checked": None
         }
         
         with open(TIPS_FILE, "w", encoding="utf-8") as f:
@@ -71,165 +74,161 @@ def save_tips(sport: str, tips_text: str):
     except Exception as e:
         logger.error(f"Failed to save tips: {e}")
 
-def load_latest_tips(sport: str = None):
+def load_all_tips():
     try:
         if not TIPS_FILE.exists():
-            return None
+            return {}
         with open(TIPS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if sport:
-            key = normalize_sport(sport)
-            return data.get(key)
-        else:
-            # Return most recent
-            return max(data.values(), key=lambda x: x.get("timestamp", ""))
+            return json.load(f)
     except:
-        return None
+        return {}
 
-async def check_tip_results(tips_data):
-    if not tips_data:
-        return None
-    
+def cleanup_old_tips():
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
-        chat = client.chat.create(
-            model="grok-4.20-reasoning",
-            tools=[web_search(), x_search()],
-            temperature=0.6,
-            max_turns=6,
-        )
+        data = load_all_tips()
+        cutoff = datetime.now(pytz.timezone('Europe/London')) - timedelta(days=3)
+        cleaned = {k: v for k, v in data.items() if datetime.fromisoformat(v["timestamp"]) > cutoff}
         
-        current_time = datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')
-        
-        prompt = f"""
-CURRENT TIME: {current_time}
-Here are the tips to check:
+        with open(TIPS_FILE, "w", encoding="utf-8") as f:
+            json.dump(cleaned, f, indent=2)
+        logger.info(f"Cleaned old tips. {len(data) - len(cleaned)} removed.")
+    except:
+        pass
 
-{tips_data['tips']}
-
-Rules:
-- ONLY check events that have already finished.
-- For each tip: Mark with ✅ WON or ❌ LOST
-- Be savage, funny and brutally honest.
-- Ignore events still in progress.
-Return clean formatted list with emojis.
-"""
-        chat.append(system("You are a savage Racing AI bot. Roast the losers, celebrate the winners."))
-        chat.append(user(prompt))
-        response = await chat.sample()
-        return clean_response(response.content)
-    except Exception as e:
-        logger.error(f"Checker error: {e}")
-        return None
-
-# ====================== AUTO CHECKER TASK ======================
-async def auto_check_all_tips():
-    logger.info("Running auto tip checker...")
-    try:
-        if not TIPS_FILE.exists():
-            return
-            
-        with open(TIPS_FILE, "r", encoding="utf-8") as f:
-            all_tips = json.load(f)
-        
-        for key, tips_data in list(all_tips.items()):
-            result = await check_tip_results(tips_data)
-            if result:
-                channel = bot.get_channel(CHANNEL_ID)
-                if channel:
-                    embed = discord.Embed(
-                        title="🔄 AUTO TIP RESULTS",
-                        description=f"**{tips_data['sport'].title()}** tips from {tips_data['timestamp'][:16]}",
-                        color=0x00ff88
-                    )
-                    embed.add_field(name="Verdict", value=result[:3900], inline=False)
-                    embed.set_footer(text="Auto-checked • Green = Bag secured • Red = Oof")
-                    await channel.send(embed=embed)
-                    logger.info(f"Posted auto results for {key}")
-    except Exception as e:
-        logger.error(f"Auto checker failed: {e}")
-
-# ====================== GET TIPS ======================
+# ====================== GET STRUCTURED TIPS ======================
 async def get_sports_tips(sport: str):
     try:
         client = AsyncClient(api_key=XAI_API_KEY, timeout=75)
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.75,
+            temperature=0.7,
             max_turns=4,
         )
         
         now = datetime.now(pytz.timezone('Europe/London'))
-        current_time_str = now.strftime('%A %d %B %Y %H:%M BST')
         cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
-        sport_display = "Horse Racing" if normalize_sport(sport) == "horse_racing" else sport.replace("_", " ").title()
         
         prompt = f"""
-CURRENT EXACT TIME: {current_time_str}
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No past events.
+CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
+ONLY events from NOW until {cutoff}.
 Focus ONLY on **{sport}**.
-For horse racing: Use real declared runners only.
-Return exactly 4 tips.
+Return EXACTLY 4 tips in valid JSON format like this:
+
+{{
+  "tips": [
+    {{"event": "Race name / Match", "selection": "Horse name / Team", "time": "14:30"}},
+    ...
+  ]
+}}
 """
-        chat.append(system("You are a savage, cheeky Racing AI bot. Be fast and funny."))
+        chat.append(system("You are a savage Racing AI bot. Always respond with clean valid JSON only."))
         chat.append(user(prompt))
         response = await chat.sample()
-        return clean_response(response.content) or "No upcoming events in next 48 hours."
+        
+        # Extract JSON
+        cleaned = clean_response(response.content)
+        try:
+            start = cleaned.find('{')
+            end = cleaned.rfind('}') + 1
+            json_str = cleaned[start:end]
+            parsed = json.loads(json_str)
+            tips_list = parsed.get("tips", [])
+            return cleaned, tips_list
+        except:
+            return cleaned, []
+            
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
-        return f"❌ Error fetching tips: {str(e)[:200]}"
+        logger.error(f"Error: {e}")
+        return f"❌ Error: {str(e)[:200]}", []
 
-# ====================== SLASH COMMANDS ======================
-@bot.tree.command(name="tips", description="Get hot tips - e.g. /tips football, /tips horse, /tips boxing")
+# ====================== AUTO CHECKER ======================
+async def auto_check_tips():
+    logger.info("🔄 Running V2 Auto Checker...")
+    data = load_all_tips()
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
+
+    for key, entry in list(data.items()):
+        if not entry.get("tips"):
+            continue
+            
+        # Check results
+        result_text = await check_individual_results(entry)
+        if result_text:
+            embed = discord.Embed(
+                title=f"🔄 AUTO RESULTS — {entry['sport'].title()}",
+                description=f"📅 {entry['timestamp'][:16]}",
+                color=0x00ff88
+            )
+            
+            embed.add_field(name="Results", value=result_text[:3900], inline=False)
+            embed.set_footer(text="✅ = Winner • ❌ = Lost • Auto-checked")
+            
+            await channel.send(embed=embed)
+            logger.info(f"Posted results for {key}")
+
+    cleanup_old_tips()
+
+async def check_individual_results(entry):
+    try:
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
+        chat = client.chat.create(
+            model="grok-4.20-reasoning",
+            tools=[web_search(), x_search()],
+            temperature=0.6,
+        )
+        
+        prompt = f"""
+Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}
+
+Check these tips and return only a clean list:
+
+{json.dumps(entry['tips'], indent=2)}
+
+For each tip: Add ✅ WON or ❌ LOST (only if result is known)
+Be savage.
+"""
+        chat.append(system("You are a savage Racing AI bot."))
+        chat.append(user(prompt))
+        response = await chat.sample()
+        return clean_response(response.content)
+    except:
+        return None
+
+# ====================== COMMANDS ======================
+@bot.tree.command(name="tips", description="Get hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
- 
-    normalized = normalize_sport(sport)
-    display_name = "All Sports" if normalized == "all" else ("Horse Racing" if normalized == "horse_racing" else sport.replace("_", " ").title())
- 
-    status_msg = await interaction.followup.send(get_random_loading_message())
-  
-    analysis = await get_sports_tips(sport)
     
-    # SAVE FOR AUTO CHECKER
-    save_tips(sport, analysis)
+    display_name = "All Sports" if sport.lower() == "all" else sport.replace("_", " ").title()
+    status_msg = await interaction.followup.send(get_random_loading_message())
+    
+    analysis, tips_list = await get_sports_tips(sport)
+    save_tips(sport, analysis, tips_list)
 
     embed = discord.Embed(
         title=f"🔥 Top 4 {display_name} Hot Tips",
         description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
         color=0xff00ff
     )
- 
-    embed.add_field(name="Hot Tips", value=analysis[:3900] or "No upcoming events in next 48 hours.", inline=False)
-    embed.set_footer(text="🔥 Tips saved • Auto results every 2 hours • Gamble responsibly")
+    embed.add_field(name="Tips", value=analysis[:3900], inline=False)
+    embed.set_footer(text="V2 Auto Checker Active • Results every 30 mins")
 
     await interaction.followup.send(embed=embed)
- 
-    try:
-        await status_msg.delete()
-    except:
-        pass
+    await status_msg.delete()
 
-# ====================== BOT EVENTS ======================
+# ====================== ON READY ======================
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} is ONLINE and READY TO PRINT!")
-    try:
-        await bot.tree.sync()
-        print("✅ Slash commands synced")
-    except Exception as e:
-        print(f"Sync warning: {e}")
+    print(f"✅ {bot.user} V2 IS LIVE AND DANGEROUS!")
+    await bot.tree.sync()
     
-    # Start scheduler
     scheduler.start()
+    scheduler.add_job(auto_check_tips, 'interval', minutes=30, next_run_time=datetime.now(pytz.timezone('Europe/London')))
     
-    # Auto check every 2 hours
-    scheduler.add_job(auto_check_all_tips, 'interval', hours=2, next_run_time=datetime.now(pytz.timezone('Europe/London')))
-    
-    # Optional: Daily cleanup of old tips (older than 5 days)
-    # scheduler.add_job(clean_old_tips, 'interval', hours=24)
+    print("✅ Auto checker started (every 30 mins)")
 
-print("🚀 Racing AI Bot with AUTO tip checker loaded!")
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
