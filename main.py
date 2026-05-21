@@ -51,50 +51,31 @@ def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return '\n'.join(line.strip() for line in text.split('\n'))
 
-# ====================== NICE DISPLAY ======================
+# ====================== DISPLAY ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events found in the next 48 hours."
     lines = []
     for i, tip in enumerate(tips_list, 1):
-        event = tip.get("event", "Unknown Event")
+        event = tip.get("event", "Unknown")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
         time_str = f" ⏰ {time}" if time else ""
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}")
     return "\n\n".join(lines)
 
-# ====================== ROBUST JSON EXTRACTOR ======================
+# ====================== JSON EXTRACTOR ======================
 def extract_json_from_text(text: str):
     try:
-        # Find JSON block
         start = text.find('{')
         end = text.rfind('}') + 1
-        if start == -1 or end == 0:
-            raise ValueError("No JSON found")
-        
+        if start == -1:
+            raise ValueError
         json_str = text[start:end]
         parsed = json.loads(json_str)
-        
-        # Handle different possible structures
-        if isinstance(parsed.get("tips"), list):
-            return parsed["tips"]
-        elif isinstance(parsed, list):
-            return parsed
-        return []
+        return parsed.get("tips", []) if isinstance(parsed.get("tips"), list) else []
     except:
-        # Fallback: Try to parse line by line if AI ignored JSON
-        tips = []
-        lines = text.split('\n')
-        current_tip = {}
-        for line in lines:
-            if "event" in line.lower() or "vs" in line or "race" in line.lower():
-                current_tip = {"event": line.strip(), "selection": "", "time": ""}
-            elif "pick" in line.lower() or "selection" in line.lower():
-                current_tip["selection"] = line.split(":", 1)[-1].strip() if ":" in line else line.strip()
-                if current_tip.get("event"):
-                    tips.append(current_tip.copy())
-        return tips
+        return []  # fallback failed
 
 # ====================== GET TIPS ======================
 async def get_sports_tips(sport: str):
@@ -112,11 +93,10 @@ async def get_sports_tips(sport: str):
         
         prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-ONLY events from NOW until {cutoff}.
+STRICT 48 HOUR RULE: Only events from NOW until {cutoff}.
 Focus ONLY on **{sport}**.
 
-**YOU MUST REPLY WITH VALID JSON ONLY. NO EXTRA TEXT.**
-
+Reply with **VALID JSON ONLY**:
 {{
   "tips": [
     {{"event": "Event name", "selection": "Your pick", "time": "HH:MM"}},
@@ -125,19 +105,19 @@ Focus ONLY on **{sport}**.
 }}
 Exactly 4 tips.
 """
-        chat.append(system("You are a savage Racing AI bot. Reply with **VALID JSON ONLY**. No explanations, no markdown, no extra words."))
+        chat.append(system("You are a savage Racing AI bot. Reply with VALID JSON ONLY. No extra text whatsoever."))
         chat.append(user(prompt))
         response = await chat.sample()
         
         cleaned = clean_response(response.content)
         tips_list = extract_json_from_text(cleaned)
-        
         display_text = format_tips_for_display(tips_list)
+        
         return display_text, tips_list
         
     except Exception as e:
         logger.error(f"Error: {e}")
-        return f"❌ Error fetching tips: {str(e)[:150]}", []
+        return "❌ Failed to fetch tips. Try again.", []
 
 # ====================== SAVE / LOAD ======================
 def save_tips(sport: str, tips_list: list):
@@ -179,7 +159,7 @@ def cleanup_old_tips():
 
 # ====================== AUTO CHECKER ======================
 async def auto_check_tips():
-    logger.info("🔄 V2.2 Auto Checker Running...")
+    logger.info("🔄 V2.3 Auto Checker Running...")
     data = load_all_tips()
     channel = bot.get_channel(CHANNEL_ID)
     if not channel: return
@@ -187,7 +167,7 @@ async def auto_check_tips():
     for key, entry in list(data.items()):
         if not entry.get("tips"): continue
         result_text = await check_individual_results(entry)
-        if result_text:
+        if result_text and "no results yet" not in result_text.lower():
             embed = discord.Embed(
                 title=f"🔄 AUTO RESULTS — {entry['sport'].title()}",
                 description=f"📅 {entry['timestamp'][:16]}",
@@ -204,13 +184,13 @@ async def check_individual_results(entry):
         client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
         chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6)
         
-        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\nTips:\n{json.dumps(entry['tips'], indent=2)}\n\nMark each with ✅ WON or ❌ LOST if finished. Be savage."
+        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\n{json.dumps(entry['tips'], indent=2)}\n\nFor each finished event: add ✅ WON or ❌ LOST. Be savage."
         chat.append(system("You are a savage Racing AI bot."))
         chat.append(user(prompt))
         response = await chat.sample()
         return clean_response(response.content)
     except:
-        return "Checker busy, try again soon."
+        return None
 
 # ====================== COMMAND ======================
 @bot.tree.command(name="tips", description="Get hot tips")
@@ -229,7 +209,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
         color=0xff00ff
     )
     embed.add_field(name="Tips", value=nice_display, inline=False)
-    embed.set_footer(text="V2.2 • Auto results every 30 mins • Gamble responsibly")
+    embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
 
     await interaction.followup.send(embed=embed)
     try: await status_msg.delete()
@@ -237,11 +217,11 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V2.2 IS FIXED AND READY!")
+    print(f"✅ {bot.user} V2.3 IS LOOKING CLEAN!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=30, next_run_time=datetime.now(pytz.timezone('Europe/London')))
-    print("✅ Auto checker running every 30 mins")
+    print("✅ Auto checker active")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
