@@ -51,7 +51,7 @@ def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return '\n'.join(line.strip() for line in text.split('\n'))
 
-# ====================== DISPLAY ======================
+# ====================== DISPLAY WITH CHEEKY COMMENTS ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events found in the next 48 hours."
@@ -60,8 +60,17 @@ def format_tips_for_display(tips_list):
         event = tip.get("event", "Unknown")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
+        day = tip.get("day", "")
+        comment = tip.get("comment", "This one smells spicy... 👀")
+        
+        day_str = f"**{day}** " if day else ""
         time_str = f" ⏰ {time}" if time else ""
-        lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}")
+        
+        lines.append(
+            f"**{i}.** {day_str}{event}{time_str}\n"
+            f"**Pick:** {selection}\n"
+            f"**Comment:** {comment}"
+        )
     return "\n\n".join(lines)
 
 # ====================== JSON EXTRACTOR ======================
@@ -75,16 +84,16 @@ def extract_json_from_text(text: str):
         parsed = json.loads(json_str)
         return parsed.get("tips", []) if isinstance(parsed.get("tips"), list) else []
     except:
-        return []  # fallback failed
+        return []
 
 # ====================== GET TIPS ======================
 async def get_sports_tips(sport: str):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=80)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=85)
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
-            temperature=0.65,
+            temperature=0.75,
             max_turns=5,
         )
         
@@ -93,19 +102,25 @@ async def get_sports_tips(sport: str):
         
         prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: Only events from NOW until {cutoff}.
+ONLY events from NOW until {cutoff}.
 Focus ONLY on **{sport}**.
 
 Reply with **VALID JSON ONLY**:
+
 {{
   "tips": [
-    {{"event": "Event name", "selection": "Your pick", "time": "HH:MM"}},
-    ...
+    {{
+      "day": "Thursday",
+      "event": "Event name",
+      "selection": "Your pick",
+      "time": "HH:MM",
+      "comment": "Cheeky savage one-liner here"
+    }}
   ]
 }}
 Exactly 4 tips.
 """
-        chat.append(system("You are a savage Racing AI bot. Reply with VALID JSON ONLY. No extra text whatsoever."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Be funny and brutal in the 'comment' field. Reply with VALID JSON ONLY."))
         chat.append(user(prompt))
         response = await chat.sample()
         
@@ -117,7 +132,7 @@ Exactly 4 tips.
         
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again.", []
+        return "❌ Failed to fetch tips. Try again mate.", []
 
 # ====================== SAVE / LOAD ======================
 def save_tips(sport: str, tips_list: list):
@@ -159,7 +174,7 @@ def cleanup_old_tips():
 
 # ====================== AUTO CHECKER ======================
 async def auto_check_tips():
-    logger.info("🔄 V2.3 Auto Checker Running...")
+    logger.info("🔄 V2.4 Auto Checker Running...")
     data = load_all_tips()
     channel = bot.get_channel(CHANNEL_ID)
     if not channel: return
@@ -184,7 +199,7 @@ async def check_individual_results(entry):
         client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
         chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6)
         
-        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\n{json.dumps(entry['tips'], indent=2)}\n\nFor each finished event: add ✅ WON or ❌ LOST. Be savage."
+        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\n{json.dumps(entry['tips'], indent=2)}\n\nMark finished ones with ✅ WON or ❌ LOST. Roast the losers."
         chat.append(system("You are a savage Racing AI bot."))
         chat.append(user(prompt))
         response = await chat.sample()
@@ -217,7 +232,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V2.3 IS LOOKING CLEAN!")
+    print(f"✅ {bot.user} V2.4 — CHEEKY MODE ACTIVATED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=30, next_run_time=datetime.now(pytz.timezone('Europe/London')))
