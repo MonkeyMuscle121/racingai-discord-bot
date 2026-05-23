@@ -51,17 +51,17 @@ def clean_response(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return '\n'.join(line.strip() for line in text.split('\n'))
 
-# ====================== DISPLAY WITH CHEEKY COMMENTS ======================
+# ====================== DISPLAY ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events found in the next 48 hours."
     lines = []
     for i, tip in enumerate(tips_list, 1):
+        day = tip.get("day", "")
         event = tip.get("event", "Unknown")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
-        day = tip.get("day", "")
-        comment = tip.get("comment", "This one smells spicy... 👀")
+        comment = tip.get("comment", "This looks tasty... 👀")
         
         day_str = f"**{day}** " if day else ""
         time_str = f" ⏰ {time}" if time else ""
@@ -106,7 +106,6 @@ ONLY events from NOW until {cutoff}.
 Focus ONLY on **{sport}**.
 
 Reply with **VALID JSON ONLY**:
-
 {{
   "tips": [
     {{
@@ -114,25 +113,23 @@ Reply with **VALID JSON ONLY**:
       "event": "Event name",
       "selection": "Your pick",
       "time": "HH:MM",
-      "comment": "Cheeky savage one-liner here"
+      "comment": "Cheeky savage comment"
     }}
   ]
 }}
 Exactly 4 tips.
 """
-        chat.append(system("You are a savage, cheeky Racing AI bot. Be funny and brutal in the 'comment' field. Reply with VALID JSON ONLY."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Be funny in comments. Reply with VALID JSON ONLY."))
         chat.append(user(prompt))
         response = await chat.sample()
         
         cleaned = clean_response(response.content)
         tips_list = extract_json_from_text(cleaned)
-        display_text = format_tips_for_display(tips_list)
-        
-        return display_text, tips_list
+        return format_tips_for_display(tips_list), tips_list
         
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again mate.", []
+        return "❌ Failed to fetch tips.", []
 
 # ====================== SAVE / LOAD ======================
 def save_tips(sport: str, tips_list: list):
@@ -146,7 +143,8 @@ def save_tips(sport: str, tips_list: list):
         data[key] = {
             "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
             "sport": sport,
-            "tips": tips_list
+            "tips": tips_list,
+            "last_checked": None
         }
         
         with open(TIPS_FILE, "w", encoding="utf-8") as f:
@@ -172,17 +170,57 @@ def cleanup_old_tips():
     except:
         pass
 
+# ====================== IMPROVED RESULTS CHECKER ======================
+async def check_individual_results(entry):
+    try:
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
+        chat = client.chat.create(
+            model="grok-4.20-reasoning",
+            tools=[web_search(), x_search()],
+            temperature=0.6,
+            max_turns=6,
+        )
+        
+        current_time = datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')
+        
+        prompt = f"""
+CURRENT TIME: {current_time}
+
+Check these tips for FINAL RESULTS:
+
+{json.dumps(entry['tips'], indent=2)}
+
+Rules:
+- ONLY mark events that have **finished**.
+- For each tip: Add ✅ **WON** or ❌ **LOST** clearly.
+- If still in progress: say "⏳ IN PROGRESS"
+- Be savage and funny on the verdicts.
+Return clean list format.
+"""
+        chat.append(system("You are a savage Racing AI bot. Always search real results first."))
+        chat.append(user(prompt))
+        response = await chat.sample()
+        return clean_response(response.content)
+    except Exception as e:
+        logger.error(f"Checker error: {e}")
+        return None
+
 # ====================== AUTO CHECKER ======================
 async def auto_check_tips():
-    logger.info("🔄 V2.4 Auto Checker Running...")
+    logger.info("🔄 V2.5 Auto Checker Running...")
     data = load_all_tips()
     channel = bot.get_channel(CHANNEL_ID)
-    if not channel: return
+    if not channel: 
+        logger.warning("Channel not found!")
+        return
 
+    updated = False
     for key, entry in list(data.items()):
-        if not entry.get("tips"): continue
+        if not entry.get("tips"): 
+            continue
+            
         result_text = await check_individual_results(entry)
-        if result_text and "no results yet" not in result_text.lower():
+        if result_text and any(mark in result_text for mark in ["✅", "❌", "WON", "LOST"]):
             embed = discord.Embed(
                 title=f"🔄 AUTO RESULTS — {entry['sport'].title()}",
                 description=f"📅 {entry['timestamp'][:16]}",
@@ -191,21 +229,13 @@ async def auto_check_tips():
             embed.add_field(name="Verdict", value=result_text[:3900], inline=False)
             embed.set_footer(text="✅ Won • ❌ Lost • Auto every 30 mins")
             await channel.send(embed=embed)
+            updated = True
+            logger.info(f"Posted results for {key}")
 
+    if not updated:
+        logger.info("No new results to post yet.")
+    
     cleanup_old_tips()
-
-async def check_individual_results(entry):
-    try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
-        chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6)
-        
-        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\n{json.dumps(entry['tips'], indent=2)}\n\nMark finished ones with ✅ WON or ❌ LOST. Roast the losers."
-        chat.append(system("You are a savage Racing AI bot."))
-        chat.append(user(prompt))
-        response = await chat.sample()
-        return clean_response(response.content)
-    except:
-        return None
 
 # ====================== COMMAND ======================
 @bot.tree.command(name="tips", description="Get hot tips")
@@ -232,11 +262,11 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V2.4 — CHEEKY MODE ACTIVATED!")
+    print(f"✅ {bot.user} V2.5 — RESULTS CHECKER FIXED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=30, next_run_time=datetime.now(pytz.timezone('Europe/London')))
-    print("✅ Auto checker active")
+    print("✅ Auto checker active every 30 mins")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
