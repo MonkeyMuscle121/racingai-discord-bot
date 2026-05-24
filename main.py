@@ -31,8 +31,8 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** race cards only... hold tight 😂",
-    "🔍 Checking declared runners...",
+    "🔍 Pulling **REAL** declared runners only... hold tight 😂",
+    "🔍 Checking live race cards...",
     "🔍 Finding proper punts...",
 ]
 
@@ -74,20 +74,20 @@ async def get_sports_tips(sport: str):
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE.
 
-You **MUST** use the web_search tool to find REAL upcoming {sport} races with declared runners today and tomorrow.
-Only include races that actually exist.
-Do not make up any race or horse.
+You **MUST** use web_search to find REAL upcoming {sport} races with declared runners.
+Only suggest horses that are actually declared to run.
+If you can't find accurate info, use fewer tips.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet Name - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet - Race Name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
-Exactly 4 tips.
+Maximum 3 tips.
 """
 
-            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate. Be brutally funny."))
+            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate horses or races. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -108,7 +108,7 @@ Exactly 4 tips.
         logger.error(f"Error: {e}")
         return "❌ Failed to fetch real tips. Try again."
 
-@bot.tree.command(name="tips", description="Get 4 general hot tips")
+@bot.tree.command(name="tips", description="Get hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
@@ -117,7 +117,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
         nice_display = await get_sports_tips(sport)
 
         embed = discord.Embed(
-            title=f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips",
+            title=f"🔥 Top Tips for {sport.replace('_', ' ').title()}",
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
@@ -132,7 +132,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.8 — LAST ATTEMPT AT REAL DATA!")
+    print(f"✅ {bot.user} V4.9 — REAL DATA ONLY!")
     await bot.tree.sync()
     scheduler.start()
 
