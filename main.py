@@ -32,7 +32,7 @@ TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
     "🔍 Pulling **REAL** declared runners... hold tight you melt 😂",
-    "🔍 Checking live race cards...",
+    "🔍 Fetching live race cards...",
     "🔍 Loading accurate tips only...",
 ]
 
@@ -63,11 +63,11 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== VERY STRICT PROMPT ======================
+# ====================== MAX ACCURACY PROMPT ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(80):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=75)
+        async with asyncio.timeout(85):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=80)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
@@ -80,24 +80,23 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}.
+STRICT 48 HOUR RULE - ONLY include races starting from NOW until {cutoff}.
 
-**CRITICAL INSTRUCTIONS:**
-- You MUST use web_search tool to find REAL current/future {sport} meetings.
-- Only include races that actually exist today or tomorrow.
-- Only use real declared runners.
-- Do NOT invent any race or horse.
+**MANDATORY:**
+- Use web_search tool multiple times if needed to verify real meetings and declared runners.
+- ONLY suggest horses that are actually declared to run.
+- If you can't find accurate info, say so instead of guessing.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet Name - Race Name", "selection": "Real horse name", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet Name - Race Name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate races, times or horses. Be brutally funny and cheeky in comments."))
+            chat.append(system("You are a savage Racing AI bot. Be extremely accurate. Never hallucinate races or horses. Always verify with tools first. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -116,9 +115,9 @@ Exactly 4 tips.
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch real tips. Try again.", []
+        return "❌ Failed to fetch real tips. Try again later.", []
 
-# Save & Auto Checker (same)
+# Save function + Auto Checker (kept minimal)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -138,11 +137,6 @@ def save_tips(sport: str, tips_list: list, specific_event=None):
             json.dump(data, f, indent=2, ensure_ascii=False)
     except:
         pass
-
-async def auto_check_tips():
-    logger.info("🔄 Auto checking tips...")
-    # (kept same as before)
-    pass  # simplified for now
 
 # Commands
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
@@ -170,7 +164,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.0 — ANTI-HALLUCINATION MODE!")
+    print(f"✅ {bot.user} V4.1 — MAX ACCURACY!")
     await bot.tree.sync()
     scheduler.start()
 
