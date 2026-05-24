@@ -31,9 +31,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** declared runners... hold tight you melt 😂",
-    "🔍 Fetching live race cards...",
-    "🔍 Loading accurate tips only...",
+    "🔍 Finding proper punts, not just favourites... hold tight you melt 😂",
+    "🔍 Digging for value bets...",
+    "🔍 Loading smart tips...",
 ]
 
 def get_random_loading_message():
@@ -57,20 +57,20 @@ def format_tips_for_display(tips_list):
         event = tip.get("event", "Unknown Event")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
-        comment = tip.get("comment", "This one smells spicy 👀")
+        comment = tip.get("comment", "This one looks decent...")
         time_str = f" ⏰ **{time}**" if time else ""
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-async def get_sports_tips(sport: str, specific_event: str = None):
+async def get_sports_tips(sport: str):
     try:
-        async with asyncio.timeout(80):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=75)
+        async with asyncio.timeout(75):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.55,
-                max_turns=6,
+                temperature=0.6,
+                max_turns=5,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -78,9 +78,10 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}.
+STRICT 48 HOUR RULE - ONLY real races from NOW until {cutoff}.
 
-YOU MUST use web_search tool to get REAL upcoming {sport} meetings.
+Use tools to get accurate upcoming {sport} races.
+Give a good mix - some strong ones, some value.
 
 Reply with **VALID JSON ONLY**:
 {{
@@ -91,7 +92,7 @@ Reply with **VALID JSON ONLY**:
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS search real data first. Never hallucinate. Be brutally funny."))
+            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate races or horses. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -104,41 +105,21 @@ Exactly 4 tips.
                     data = json.loads(text[start:end])
                     tips_list = data.get("tips", [])
             except:
-                logger.warning("JSON parse failed")
+                pass
             
-            return format_tips_for_display(tips_list), tips_list
+            return format_tips_for_display(tips_list)
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch real tips.", []
-
-def save_tips(sport: str, tips_list: list):
-    try:
-        data = {}
-        if TIPS_FILE.exists():
-            with open(TIPS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        
-        key = normalize_sport(sport)
-        data[key] = {
-            "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
-            "sport": sport,
-            "tips": tips_list
-        }
-        
-        with open(TIPS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except:
-        pass
+        return "❌ Failed to fetch tips. Try again."
 
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
-async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
+async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        nice_display, tips_list = await get_sports_tips(sport)
-        save_tips(sport, tips_list)
+        nice_display = await get_sports_tips(sport)
 
         embed = discord.Embed(
             title=f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips",
@@ -146,7 +127,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -156,7 +137,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} ROLLED BACK TO V4.1!")
+    print(f"✅ {bot.user} V4.6 — FIXED!")
     await bot.tree.sync()
 
 if __name__ == "__main__":
