@@ -49,7 +49,7 @@ def normalize_sport(sport: str) -> str:
 def clean_response(text: str) -> str:
     return '\n'.join(line.strip() for line in text.strip().split('\n'))
 
-# ====================== DISPLAY WITH TIME ======================
+# ====================== DISPLAY ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events in next 48hrs."
@@ -61,20 +61,19 @@ def format_tips_for_display(tips_list):
         comment = tip.get("comment", "This one smells spicy 👀")
         
         time_str = f" ⏰ **{time}**" if time else ""
-        
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== GET TIPS ======================
+# ====================== GET TIPS (Real Data Forced) ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(65):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
+        async with asyncio.timeout(70):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.7,
-                max_turns=4,
+                temperature=0.65,
+                max_turns=5,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -83,31 +82,27 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give 3 cheeky tips for this specific event: {specific_event} ({sport}).
-
-Reply with **VALID JSON ONLY**:
-{{
-  "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
-  ]
-}}
+Search real data first for this specific event: {specific_event} ({sport}).
+Give 3 tips. Reply with VALID JSON ONLY.
 """
             else:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-ONLY events from NOW until {cutoff}.
+STRICT 48 HOUR RULE: ONLY events from NOW until {cutoff}.
 Focus ONLY on **{sport}**.
+
+**YOU MUST USE web_search TOOL** to get real upcoming races and declared runners.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Full race name with time", "selection": "Horse / Team", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
             
-            chat.append(system("You are a savage, cheeky Racing AI bot. Always reply with clean VALID JSON only. Be brutally funny in comments."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS search real data first using tools. Reply with clean VALID JSON only. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -236,7 +231,7 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.4 — TIMES ADDED BACK!")
+    print(f"✅ {bot.user} V3.5 — REAL RACE DATA ENFORCED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
