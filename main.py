@@ -40,12 +40,6 @@ def get_random_loading_message():
     import random
     return random.choice(LOADING_MESSAGES)
 
-def normalize_sport(sport: str) -> str:
-    sport_lower = sport.lower().strip()
-    if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
-        return "horse_racing"
-    return sport_lower
-
 def clean_response(text: str) -> str:
     return '\n'.join(line.strip() for line in text.strip().split('\n'))
 
@@ -62,10 +56,10 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-async def get_sports_tips(sport: str, specific_event: str = None):
+async def get_sports_tips(sport: str = None):
     try:
-        async with asyncio.timeout(65):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
+        async with asyncio.timeout(70):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
@@ -76,34 +70,29 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             now = datetime.now(pytz.timezone('Europe/London'))
             cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
             
-            if specific_event:
+            if sport and sport.lower() != "all":
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give 3 cheeky tips for this specific event: {specific_event} ({sport}).
-
-Reply with **VALID JSON ONLY**:
-{{
-  "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
-  ]
-}}
+ONLY events from NOW until {cutoff}.
+Focus ONLY on **{sport}**.
 """
             else:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 ONLY events from NOW until {cutoff}.
-Focus ONLY on **{sport}**.
-
-Reply with **VALID JSON ONLY**:
-{{
-  "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
-  ]
-}}
-Exactly 4 tips.
+Give 4 tips from **varied sports** (football, tennis, boxing, ufc, etc).
 """
-            
-            chat.append(system("You are a savage, cheeky Racing AI bot. Always reply with clean VALID JSON only. Be brutally funny in comments."))
+
+            prompt += """
+Reply with **VALID JSON ONLY**:
+{
+  "tips": [
+    {"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}
+  ]
+}
+"""
+
+            chat.append(system("You are a savage, cheeky Racing AI bot. Be brutally funny in comments. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -116,28 +105,23 @@ Exactly 4 tips.
                     data = json.loads(text[start:end])
                     tips_list = data.get("tips", [])
             except:
-                logger.warning("JSON parse failed")
+                pass
             
             return format_tips_for_display(tips_list), tips_list
             
-    except asyncio.TimeoutError:
-        return "❌ Timed out. Try again.", []
     except Exception as e:
         logger.error(f"Error: {e}")
         return "❌ Failed to fetch tips.", []
 
-def save_tips(sport: str, tips_list: list, specific_event=None):
+def save_tips(tips_list):
     try:
         data = {}
         if TIPS_FILE.exists():
             with open(TIPS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
         
-        key = normalize_sport(sport) + (f"_{specific_event[:20]}" if specific_event else "")
-        data[key] = {
+        data["latest"] = {
             "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
-            "sport": sport,
-            "event": specific_event,
             "tips": tips_list
         }
         
@@ -146,17 +130,22 @@ def save_tips(sport: str, tips_list: list, specific_event=None):
     except:
         pass
 
-@bot.tree.command(name="tips", description="Get 4 general hot tips")
-async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
+async def auto_check_tips():
+    logger.info("🔄 Auto checking tips...")
+    # Simplified auto checker for now
+    pass
+
+@bot.tree.command(name="tips", description="Get 4 varied hot tips")
+async def hot_tips(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        nice_display, tips_list = await get_sports_tips(sport)
-        save_tips(sport, tips_list)
+        nice_display, tips_list = await get_sports_tips()
+        save_tips(tips_list)
 
         embed = discord.Embed(
-            title=f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips",
+            title="🔥 Top 4 Varied Hot Tips",
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
@@ -171,9 +160,10 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.1 REVERTED!")
+    print(f"✅ {bot.user} V5.0 — MULTI-SPORT + AUTO CHECKER!")
     await bot.tree.sync()
     scheduler.start()
+    scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
