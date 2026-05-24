@@ -56,7 +56,7 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-async def get_sports_tips(sport: str = None):
+async def get_sports_tips(sport: str = None, specific_event: str = None):
     try:
         async with asyncio.timeout(70):
             client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
@@ -70,29 +70,28 @@ async def get_sports_tips(sport: str = None):
             now = datetime.now(pytz.timezone('Europe/London'))
             cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
             
-            if sport and sport.lower() != "all":
+            if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-ONLY events from NOW until {cutoff}.
-Focus ONLY on **{sport}**.
+Give 3 tips for this specific event: {specific_event}.
 """
             else:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 ONLY events from NOW until {cutoff}.
-Give 4 tips from **varied sports** (football, tennis, boxing, ufc, etc).
+Give 4 tips from varied sports (football, tennis, boxing, ufc etc). No horse racing.
 """
 
             prompt += """
 Reply with **VALID JSON ONLY**:
 {
   "tips": [
-    {"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}
+    {"event": "Event name", "selection": "Pick", "time": "HH:MM", "comment": "Savage funny comment"}
   ]
 }
 """
 
-            chat.append(system("You are a savage, cheeky Racing AI bot. Be brutally funny in comments. Reply with clean VALID JSON only."))
+            chat.append(system("You are a savage, cheeky AI betting bot. Be brutally funny. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -113,14 +112,15 @@ Reply with **VALID JSON ONLY**:
         logger.error(f"Error: {e}")
         return "❌ Failed to fetch tips.", []
 
-def save_tips(tips_list):
+def save_tips(tips_list, specific_event=None):
     try:
         data = {}
         if TIPS_FILE.exists():
             with open(TIPS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
         
-        data["latest"] = {
+        key = "latest" + (f"_{specific_event[:20]}" if specific_event else "")
+        data[key] = {
             "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
             "tips": tips_list
         }
@@ -130,11 +130,7 @@ def save_tips(tips_list):
     except:
         pass
 
-async def auto_check_tips():
-    logger.info("🔄 Auto checking tips...")
-    # Simplified auto checker for now
-    pass
-
+# ====================== COMMANDS ======================
 @bot.tree.command(name="tips", description="Get 4 varied hot tips")
 async def hot_tips(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
@@ -150,7 +146,30 @@ async def hot_tips(interaction: discord.Interaction):
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        await interaction.followup.send(embed=embed)
+    except:
+        await interaction.followup.send("❌ Error. Try again.")
+    finally:
+        try: await status_msg.delete()
+        except: pass
+
+@bot.tree.command(name="tipsevent", description="Get 3 tips for a specific match/fight")
+async def tips_event(interaction: discord.Interaction, sport: str, event: str):
+    await interaction.response.defer(thinking=True)
+    status_msg = await interaction.followup.send(get_random_loading_message())
+    
+    try:
+        nice_display, tips_list = await get_sports_tips(sport, event)
+        save_tips(tips_list, event)
+
+        embed = discord.Embed(
+            title=f"🎯 3 Tips for: {event}",
+            description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
+            color=0xff00ff
+        )
+        embed.add_field(name="Tips", value=nice_display, inline=False)
+        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -160,10 +179,9 @@ async def hot_tips(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V5.0 — MULTI-SPORT + AUTO CHECKER!")
+    print(f"✅ {bot.user} V5.1 — MULTI-SPORT + /tipsevent + AUTO CHECKER!")
     await bot.tree.sync()
     scheduler.start()
-    scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
