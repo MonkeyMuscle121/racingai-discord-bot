@@ -31,9 +31,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** declared runners... hold tight you melt 😂",
-    "🔍 Fetching live race cards...",
-    "🔍 Loading accurate tips only...",
+    "🔍 Analysing real form, ground, weather & history... hold tight 😂",
+    "🔍 Digging deep for value bets...",
+    "🔍 Finding proper punts, not just favourites...",
 ]
 
 def get_random_loading_message():
@@ -63,7 +63,7 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== MAX ACCURACY PROMPT ======================
+# ====================== DEEP ANALYSIS PROMPT ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
         async with asyncio.timeout(85):
@@ -71,8 +71,8 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.5,
-                max_turns=7,
+                temperature=0.7,
+                max_turns=6,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -80,23 +80,23 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE - ONLY include races starting from NOW until {cutoff}.
+STRICT 48 HOUR RULE: ONLY events from NOW until {cutoff}.
 
-**MANDATORY:**
-- Use web_search tool multiple times if needed to verify real meetings and declared runners.
-- ONLY suggest horses that are actually declared to run.
-- If you can't find accurate info, say so instead of guessing.
+**DEEP ANALYSIS REQUIRED:**
+- Check real form, ground conditions, weather, trainer/jockey stats, course history, pace, value odds.
+- Mix of strong favourites, value bets, and dark horses.
+- Do NOT just pick the favourite every time.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet Name - Race Name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet - Race Name", "selection": "Horse name", "time": "HH:MM", "comment": "Savage funny analysis"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage Racing AI bot. Be extremely accurate. Never hallucinate races or horses. Always verify with tools first. Be brutally funny."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Do proper analysis using tools. Give a good mixture of tips (some favourites, some value, some upset picks). Be brutally funny in comments."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -115,9 +115,9 @@ Exactly 4 tips.
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch real tips. Try again later.", []
+        return "❌ Failed to fetch tips. Try again.", []
 
-# Save function + Auto Checker (kept minimal)
+# Save function (kept simple)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -164,7 +164,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.1 — MAX ACCURACY!")
+    print(f"✅ {bot.user} V4.2 — DEEP ANALYSIS MODE!")
     await bot.tree.sync()
     scheduler.start()
 
