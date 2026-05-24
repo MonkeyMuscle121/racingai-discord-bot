@@ -27,13 +27,9 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="Europe/London")
 
-TIPS_FILE = Path("tips_history.json")
-TIPS_FILE.touch(exist_ok=True)
-
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** declared runners only... hold tight 😂",
+    "🔍 Pulling **REAL** declared runners... hold tight 😂",
     "🔍 Checking live race cards...",
-    "🔍 Finding proper punts...",
 ]
 
 def get_random_loading_message():
@@ -45,21 +41,21 @@ def clean_response(text: str) -> str:
 
 def format_tips_for_display(tips_list):
     if not tips_list:
-        return "No upcoming events in next 48hrs."
+        return "No reliable tips right now."
     lines = []
     for i, tip in enumerate(tips_list, 1):
-        event = tip.get("event", "Unknown Event")
+        event = tip.get("event", "Unknown")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
-        comment = tip.get("comment", "This one looks decent...")
+        comment = tip.get("comment", "Decent chance...")
         time_str = f" ⏰ **{time}**" if time else ""
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
 async def get_sports_tips(sport: str):
     try:
-        async with asyncio.timeout(80):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=75)
+        async with asyncio.timeout(75):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
@@ -74,17 +70,11 @@ async def get_sports_tips(sport: str):
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE.
 
-You **MUST** use web_search to find REAL upcoming {sport} races with declared runners.
-Only suggest horses that are actually declared to run.
-If you can't find accurate info, use fewer tips.
+Use web_search to find **REAL** upcoming {sport} races with declared runners.
+Only use horses that are actually running.
+Give maximum 3 tips.
 
-Reply with **VALID JSON ONLY**:
-{{
-  "tips": [
-    {{"event": "Meet - Race Name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
-  ]
-}}
-Maximum 3 tips.
+Reply with VALID JSON ONLY.
 """
 
             chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate horses or races. Be brutally funny."))
@@ -106,7 +96,7 @@ Maximum 3 tips.
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch real tips. Try again."
+        return "❌ Couldn't get real tips. Try again."
 
 @bot.tree.command(name="tips", description="Get hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
@@ -122,7 +112,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -132,7 +122,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.9 — REAL DATA ONLY!")
+    print(f"✅ {bot.user} V5.0 — REAL DATA ONLY!")
     await bot.tree.sync()
     scheduler.start()
 
