@@ -31,8 +31,8 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Finding proper punts... hold tight 😂",
-    "🔍 Digging for value bets...",
+    "🔍 Finding proper punts, not just favourites... hold tight 😂",
+    "🔍 Analysing form, ground & value...",
     "🔍 Loading smart tips...",
 ]
 
@@ -51,22 +51,21 @@ def clean_response(text: str) -> str:
 
 def format_tips_for_display(tips_list):
     if not tips_list:
-        return "No upcoming events right now."
+        return "No upcoming events in next 48hrs."
     lines = []
     for i, tip in enumerate(tips_list, 1):
         event = tip.get("event", "Unknown Event")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
-        comment = tip.get("comment", "Looks decent...")
+        comment = tip.get("comment", "This one looks decent...")
         time_str = f" ⏰ **{time}**" if time else ""
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== STABLE TIP FETCH ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(60):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=55)
+        async with asyncio.timeout(70):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
@@ -81,11 +80,13 @@ async def get_sports_tips(sport: str, specific_event: str = None):
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE.
 
-Give 4 good tips for {sport} with a mix of favourites and value bets.
-Reply with clean JSON only.
+Give 4 good tips for {sport} with a **smart mixture** (some favourites, some value, some dark horses).
+Consider form, ground, weather, history.
+
+Reply with clean VALID JSON only.
 """
 
-            chat.append(system("You are a savage, cheeky Racing AI bot. Be funny. Reply with VALID JSON only."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Give smart varied tips. Be brutally funny. Reply with VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -104,7 +105,7 @@ Reply with clean JSON only.
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again in 20 seconds.", []
+        return "❌ Failed to fetch tips. Try again.", []
 
 def save_tips(sport: str, tips_list: list):
     try:
@@ -125,7 +126,6 @@ def save_tips(sport: str, tips_list: list):
     except:
         pass
 
-# ====================== COMMANDS ======================
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
@@ -141,7 +141,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -151,7 +151,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.4 — STABLE MODE!")
+    print(f"✅ {bot.user} V4.4 — BACK TO WORKING!")
     await bot.tree.sync()
     scheduler.start()
 
