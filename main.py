@@ -33,7 +33,7 @@ TIPS_FILE.touch(exist_ok=True)
 LOADING_MESSAGES = [
     "🔍 Pulling **REAL** race cards... hold tight you melt 😂",
     "🔍 Fetching live declared runners...",
-    "🔍 Loading accurate tips only...",
+    "🔍 Loading accurate tips...",
 ]
 
 def get_random_loading_message():
@@ -49,7 +49,7 @@ def normalize_sport(sport: str) -> str:
 def clean_response(text: str) -> str:
     return '\n'.join(line.strip() for line in text.strip().split('\n'))
 
-# ====================== DISPLAY ======================
+# ====================== DISPLAY WITH MEET ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events in next 48hrs."
@@ -64,7 +64,7 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== STRONG REAL DATA PROMPT ======================
+# ====================== STRONG PROMPT ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
         async with asyncio.timeout(80):
@@ -83,21 +83,18 @@ async def get_sports_tips(sport: str, specific_event: str = None):
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}.
 
-YOU MUST use web_search tool to find REAL upcoming {sport} races with actual declared runners and correct times.
-Do NOT invent any races or times that don't exist today.
-
-Focus ONLY on **{sport}**.
+YOU MUST use web_search to get REAL upcoming {sport} meetings with correct times and declared runners.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Accurate race name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet Name - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage, cheeky Racing AI bot. ONLY use real data from web_search. Never hallucinate races, times or horses. Be brutally funny in comments."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS search real data first. Include the racecourse/meet name clearly in the event field. Never hallucinate. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -120,7 +117,7 @@ Exactly 4 tips.
         logger.error(f"Error: {e}")
         return "❌ Failed to fetch real tips.", []
 
-# Save & Auto Checker (unchanged)
+# Save & Auto Checker (unchanged from last)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -223,7 +220,7 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.8 — MAX ACCURACY MODE!")
+    print(f"✅ {bot.user} V3.9 — MEET NAMES FIXED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
