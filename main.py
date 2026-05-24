@@ -49,7 +49,7 @@ def normalize_sport(sport: str) -> str:
 def clean_response(text: str) -> str:
     return '\n'.join(line.strip() for line in text.strip().split('\n'))
 
-# ====================== DISPLAY ======================
+# ====================== DISPLAY WITH TIME ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
         return "No upcoming events in next 48hrs."
@@ -57,8 +57,12 @@ def format_tips_for_display(tips_list):
     for i, tip in enumerate(tips_list, 1):
         event = tip.get("event", "Unknown Event")
         selection = tip.get("selection", "Unknown")
+        time = tip.get("time", "")
         comment = tip.get("comment", "This one smells spicy 👀")
-        lines.append(f"**{i}.** {event}\n**Pick:** {selection}\n**Comment:** {comment}")
+        
+        time_str = f" ⏰ **{time}**" if time else ""
+        
+        lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
 # ====================== GET TIPS ======================
@@ -80,12 +84,11 @@ async def get_sports_tips(sport: str, specific_event: str = None):
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 Give 3 cheeky tips for this specific event: {specific_event} ({sport}).
-STRICT 48 HOUR RULE.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "comment": "Savage funny comment"}}
+    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 """
@@ -98,7 +101,7 @@ Focus ONLY on **{sport}**.
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Full event name", "selection": "Your pick", "comment": "Savage funny comment"}}
+    {{"event": "Full event name", "selection": "Your pick", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
@@ -233,7 +236,7 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.3 — UNKNOWN FIXED!")
+    print(f"✅ {bot.user} V3.4 — TIMES ADDED BACK!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
