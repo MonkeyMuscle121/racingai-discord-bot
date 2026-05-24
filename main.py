@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 import discord
@@ -13,6 +13,7 @@ from pathlib import Path
 # xAI SDK
 from xai_sdk import AsyncClient
 from xai_sdk.chat import user, system
+from xai_sdk.tools import web_search, x_search
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -29,40 +30,148 @@ scheduler = AsyncIOScheduler(timezone="Europe/London")
 TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
-LOADING_MESSAGES = ["🔍 Loading tips... hang on king", "🔍 Fetching data...", "🔍 One moment..."]
+LOADING_MESSAGES = [
+    "🔍 Pulling live data... hold tight you melt 😂",
+    "🔍 Fetching fresh tips... 35-55s",
+    "🔍 Loading... go touch grass",
+]
 
 def get_random_loading_message():
     import random
     return random.choice(LOADING_MESSAGES)
 
-# ====================== FAST GET TIPS ======================
+def normalize_sport(sport: str) -> str:
+    sport_lower = sport.lower().strip()
+    if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
+        return "horse_racing"
+    return sport_lower
+
+def clean_response(text: str) -> str:
+    return '\n'.join(line.strip() for line in text.strip().split('\n'))
+
+# ====================== DISPLAY ======================
+def format_tips_for_display(tips_list):
+    if not tips_list:
+        return "No upcoming events in next 48hrs."
+    lines = []
+    for i, tip in enumerate(tips_list, 1):
+        event = tip.get("event", "Unknown")
+        selection = tip.get("selection", "Unknown")
+        comment = tip.get("comment", "This one smells spicy 👀")
+        lines.append(f"**{i}.** {event}\n**Pick:** {selection}\n**Comment:** {comment}")
+    return "\n\n".join(lines)
+
+# ====================== GET TIPS ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(45):   # Hard 45 second cutoff
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=45)
+        async with asyncio.timeout(60):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=55)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
-                temperature=0.7,
-                max_turns=2,
+                tools=[web_search(), x_search()],
+                temperature=0.75,
+                max_turns=3,
             )
             
+            now = datetime.now(pytz.timezone('Europe/London'))
+            cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
+            
             if specific_event:
-                prompt = f"Give 3 quick tips for this match: {specific_event} ({sport}). Format as simple list."
+                prompt = f"""
+CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
+Give 3 cheeky tips for this specific event: {specific_event} in {sport}.
+Strictly within next 48 hours.
+Reply with JSON only.
+"""
             else:
-                prompt = f"Give 4 quick hot tips for {sport} right now. Format as simple list."
+                prompt = f"""
+CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
+ONLY events from NOW until {cutoff}.
+Focus ONLY on {sport}.
+Give exactly 4 tips with cheeky comments.
+Reply with JSON only.
+"""
             
-            chat.append(system("You are a savage funny Racing AI bot. Be quick and cheeky."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Be funny and brutal in comments. Reply with clean JSON only."))
             chat.append(user(prompt))
-            
             response = await chat.sample()
             
-            return response.content[:3900], []
+            # Extract tips
+            text = clean_response(response.content)
+            tips_list = []
+            try:
+                start = text.find('{')
+                end = text.rfind('}') + 1
+                if start != -1:
+                    data = json.loads(text[start:end])
+                    tips_list = data.get("tips", [])
+            except:
+                pass
+            
+            return format_tips_for_display(tips_list), tips_list
             
     except asyncio.TimeoutError:
-        return "❌ Request timed out. Try again.", []
+        return "❌ Timed out. Try again.", []
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Bot is busy. Try again in 20 seconds.", []
+        return "❌ Failed to fetch tips. Try again.", []
+
+# ====================== SAVE / AUTO ======================
+def save_tips(sport: str, tips_list: list, specific_event=None):
+    try:
+        data = {}
+        if TIPS_FILE.exists():
+            with open(TIPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        
+        key = normalize_sport(sport) + (f"_{specific_event[:20]}" if specific_event else "")
+        data[key] = {
+            "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
+            "sport": sport,
+            "event": specific_event,
+            "tips": tips_list
+        }
+        
+        with open(TIPS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except:
+        pass
+
+async def check_individual_results(entry):
+    try:
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=50)
+        chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6, max_turns=4)
+        
+        prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\nTips:\n{json.dumps(entry.get('tips', []), indent=2)}\n\nMark finished ones with ✅ WON or ❌ LOST. Be savage."
+        chat.append(system("You are a savage Racing AI bot."))
+        chat.append(user(prompt))
+        response = await chat.sample()
+        return clean_response(response.content)
+    except:
+        return None
+
+async def auto_check_tips():
+    logger.info("🔄 Auto checking tips...")
+    try:
+        if not TIPS_FILE.exists(): return
+        with open(TIPS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel: return
+        
+        for key, entry in list(data.items()):
+            if not entry.get("tips"): continue
+            result = await check_individual_results(entry)
+            if result and any(x in result for x in ["✅", "❌"]):
+                title = f"🔄 AUTO RESULTS — {entry['sport'].title()}"
+                if entry.get("event"): title += f" | {entry['event']}"
+                embed = discord.Embed(title=title, description=f"📅 {entry['timestamp'][:16]}", color=0x00ff88)
+                embed.add_field(name="Verdict", value=result[:3900], inline=False)
+                embed.set_footer(text="✅ Won • ❌ Lost • Auto every 40 mins")
+                await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Auto check error: {e}")
 
 # ====================== COMMANDS ======================
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
@@ -71,53 +180,53 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        display, _ = await get_sports_tips(sport)
-        
+        nice_display, tips_list = await get_sports_tips(sport)
+        save_tips(sport, tips_list)
+
         embed = discord.Embed(
-            title=f"🔥 Top Tips for {sport.replace('_', ' ').title()}",
+            title=f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips",
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
-        embed.add_field(name="Tips", value=display or "No tips right now", inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        
+        embed.add_field(name="Tips", value=nice_display, inline=False)
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send("❌ Something broke. Try again.")
-        logger.error(e)
+    except:
+        await interaction.followup.send("❌ Error. Try again.")
     finally:
         try: await status_msg.delete()
         except: pass
 
-@bot.tree.command(name="tipsevent", description="Get tips for specific match")
+@bot.tree.command(name="tipsevent", description="Get 3 tips for a specific match")
 async def tips_event(interaction: discord.Interaction, sport: str, event: str):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        display, _ = await get_sports_tips(sport, event)
-        
+        nice_display, tips_list = await get_sports_tips(sport, event)
+        save_tips(sport, tips_list, event)
+
         embed = discord.Embed(
-            title=f"🎯 Tips for: {event}",
+            title=f"🎯 3 Tips for: {event}",
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
-        embed.add_field(name="Tips", value=display or "No tips right now", inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
-        
+        embed.add_field(name="Tips", value=nice_display, inline=False)
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send("❌ Failed. Try again.")
-        logger.error(e)
+    except:
+        await interaction.followup.send("❌ Error. Try again.")
     finally:
         try: await status_msg.delete()
         except: pass
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.1 — ULTRA LIGHT MODE ACTIVATED!")
+    print(f"✅ {bot.user} V3.2 IS FULLY LOADED!")
     await bot.tree.sync()
-    print("✅ Commands synced")
+    scheduler.start()
+    scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
+    print("✅ Auto checker started")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
