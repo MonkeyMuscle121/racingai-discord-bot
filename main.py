@@ -1,19 +1,17 @@
+
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
-import json
 import asyncio
-from pathlib import Path
 
 # xAI SDK
 from xai_sdk import AsyncClient
 from xai_sdk.chat import user, system
-from xai_sdk.tools import web_search, x_search
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -28,75 +26,37 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="Europe/London")
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** declared runners... hold tight 😂",
-    "🔍 Checking live race cards...",
+    "🔍 Finding proper punts... hold tight you melt 😂",
+    "🔍 Digging for value bets...",
+    "🔍 Loading smart tips...",
 ]
 
 def get_random_loading_message():
     import random
     return random.choice(LOADING_MESSAGES)
 
-def clean_response(text: str) -> str:
-    return '\n'.join(line.strip() for line in text.strip().split('\n'))
-
-def format_tips_for_display(tips_list):
-    if not tips_list:
-        return "No reliable tips right now."
-    lines = []
-    for i, tip in enumerate(tips_list, 1):
-        event = tip.get("event", "Unknown")
-        selection = tip.get("selection", "Unknown")
-        time = tip.get("time", "")
-        comment = tip.get("comment", "Decent chance...")
-        time_str = f" ⏰ **{time}**" if time else ""
-        lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
-    return "\n\n".join(lines)
-
 async def get_sports_tips(sport: str):
     try:
-        async with asyncio.timeout(75):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
+        async with asyncio.timeout(65):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.5,
-                max_turns=6,
+                temperature=0.7,
+                max_turns=4,
             )
             
-            now = datetime.now(pytz.timezone('Europe/London'))
-            cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
+            prompt = f"Give 4 good {sport} tips for today and tomorrow. Include meet, race name, time, pick and a savage comment. Just reply normally, no JSON."
             
-            prompt = f"""
-CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE.
-
-Use web_search to find **REAL** upcoming {sport} races with declared runners.
-Only use horses that are actually running.
-Give maximum 3 tips.
-
-Reply with VALID JSON ONLY.
-"""
-
-            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate horses or races. Be brutally funny."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Be funny and brutal. Use real races only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
-            text = clean_response(response.content)
-            tips_list = []
-            try:
-                start = text.find('{')
-                end = text.rfind('}') + 1
-                if start != -1:
-                    data = json.loads(text[start:end])
-                    tips_list = data.get("tips", [])
-            except:
-                pass
-            
-            return format_tips_for_display(tips_list)
+            return response.content[:3900]
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Couldn't get real tips. Try again."
+        return "❌ Failed to fetch tips. Try again in 30 seconds."
 
 @bot.tree.command(name="tips", description="Get hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
@@ -104,15 +64,15 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        nice_display = await get_sports_tips(sport)
+        display = await get_sports_tips(sport)
 
         embed = discord.Embed(
             title=f"🔥 Top Tips for {sport.replace('_', ' ').title()}",
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
-        embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        embed.add_field(name="Tips", value=display or "No tips right now", inline=False)
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -122,9 +82,8 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V5.0 — REAL DATA ONLY!")
+    print(f"✅ {bot.user} V5.0 — SIMPLE & WORKING!")
     await bot.tree.sync()
-    scheduler.start()
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
