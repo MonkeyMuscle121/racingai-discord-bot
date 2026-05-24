@@ -31,9 +31,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Analysing real form, ground, weather & history... hold tight 😂",
-    "🔍 Digging deep for value bets...",
-    "🔍 Finding proper punts, not just favourites...",
+    "🔍 Finding proper punts, not just favourites... hold tight 😂",
+    "🔍 Analysing form, ground & value...",
+    "🔍 Loading smart tips...",
 ]
 
 def get_random_loading_message():
@@ -63,16 +63,16 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== DEEP ANALYSIS PROMPT ======================
+# ====================== BALANCED SPEED + ANALYSIS ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(85):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=80)
+        async with asyncio.timeout(65):   # Tight timeout
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.7,
-                max_turns=6,
+                temperature=0.65,
+                max_turns=4,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -80,23 +80,21 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events from NOW until {cutoff}.
+STRICT 48 HOUR RULE.
 
-**DEEP ANALYSIS REQUIRED:**
-- Check real form, ground conditions, weather, trainer/jockey stats, course history, pace, value odds.
-- Mix of strong favourites, value bets, and dark horses.
-- Do NOT just pick the favourite every time.
+Give a good **MIXTURE** of tips: some strong favourites, some value bets, some dark horses.
+Consider form, ground, weather, trainer stats, history.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet - Race Name", "selection": "Horse name", "time": "HH:MM", "comment": "Savage funny analysis"}}
+    {{"event": "Meet - Race Name", "selection": "Horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage, cheeky Racing AI bot. Do proper analysis using tools. Give a good mixture of tips (some favourites, some value, some upset picks). Be brutally funny in comments."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Give smart mixture of tips. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -109,15 +107,16 @@ Exactly 4 tips.
                     data = json.loads(text[start:end])
                     tips_list = data.get("tips", [])
             except:
-                logger.warning("JSON parse failed")
+                pass
             
             return format_tips_for_display(tips_list), tips_list
             
+    except asyncio.TimeoutError:
+        return "❌ Took too long. Try again.", []
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again.", []
+        return "❌ Bot busy. Try again in 20s.", []
 
-# Save function (kept simple)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -164,7 +163,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.2 — DEEP ANALYSIS MODE!")
+    print(f"✅ {bot.user} V4.2 — MIXTURE MODE ACTIVATED!")
     await bot.tree.sync()
     scheduler.start()
 
