@@ -31,8 +31,8 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** declared runners only... hold tight 😂",
-    "🔍 Checking live race cards...",
+    "🔍 Pulling **REAL** race cards only... hold tight 😂",
+    "🔍 Checking declared runners...",
     "🔍 Finding proper punts...",
 ]
 
@@ -74,20 +74,20 @@ async def get_sports_tips(sport: str):
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE.
 
-You MUST use web_search tool to find REAL upcoming {sport} races with declared runners.
-Only suggest horses that are actually running today or tomorrow.
-Do not hallucinate any race or horse.
+You **MUST** use the web_search tool to find REAL upcoming {sport} races with declared runners today and tomorrow.
+Only include races that actually exist.
+Do not make up any race or horse.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet Name - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage Racing AI bot. ONLY use real data from tools. Never make up races or horses. Be brutally funny."))
+            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -132,7 +132,7 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.7 — ANTI-HALLUCINATION MODE!")
+    print(f"✅ {bot.user} V4.8 — LAST ATTEMPT AT REAL DATA!")
     await bot.tree.sync()
     scheduler.start()
 
