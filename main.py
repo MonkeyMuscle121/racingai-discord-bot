@@ -55,7 +55,7 @@ def format_tips_for_display(tips_list):
         return "No upcoming events in next 48hrs."
     lines = []
     for i, tip in enumerate(tips_list, 1):
-        event = tip.get("event", "Unknown")
+        event = tip.get("event", "Unknown Event")
         selection = tip.get("selection", "Unknown")
         comment = tip.get("comment", "This one smells spicy 👀")
         lines.append(f"**{i}.** {event}\n**Pick:** {selection}\n**Comment:** {comment}")
@@ -64,13 +64,13 @@ def format_tips_for_display(tips_list):
 # ====================== GET TIPS ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(60):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=55)
+        async with asyncio.timeout(65):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=60)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.75,
-                max_turns=3,
+                temperature=0.7,
+                max_turns=4,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -79,24 +79,35 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give 3 cheeky tips for this specific event: {specific_event} in {sport}.
-Strictly within next 48 hours.
-Reply with JSON only.
+Give 3 cheeky tips for this specific event: {specific_event} ({sport}).
+STRICT 48 HOUR RULE.
+
+Reply with **VALID JSON ONLY**:
+{{
+  "tips": [
+    {{"event": "Full event name", "selection": "Your pick", "comment": "Savage funny comment"}}
+  ]
+}}
 """
             else:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 ONLY events from NOW until {cutoff}.
-Focus ONLY on {sport}.
-Give exactly 4 tips with cheeky comments.
-Reply with JSON only.
+Focus ONLY on **{sport}**.
+
+Reply with **VALID JSON ONLY**:
+{{
+  "tips": [
+    {{"event": "Full event name", "selection": "Your pick", "comment": "Savage funny comment"}}
+  ]
+}}
+Exactly 4 tips.
 """
             
-            chat.append(system("You are a savage, cheeky Racing AI bot. Be funny and brutal in comments. Reply with clean JSON only."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. Always reply with clean VALID JSON only. Be brutally funny in comments."))
             chat.append(user(prompt))
             response = await chat.sample()
             
-            # Extract tips
             text = clean_response(response.content)
             tips_list = []
             try:
@@ -106,7 +117,7 @@ Reply with JSON only.
                     data = json.loads(text[start:end])
                     tips_list = data.get("tips", [])
             except:
-                pass
+                logger.warning("JSON parse failed")
             
             return format_tips_for_display(tips_list), tips_list
             
@@ -114,9 +125,9 @@ Reply with JSON only.
         return "❌ Timed out. Try again.", []
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again.", []
+        return "❌ Failed to fetch tips.", []
 
-# ====================== SAVE / AUTO ======================
+# ====================== SAVE & AUTO CHECKER ======================
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -222,11 +233,10 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.2 IS FULLY LOADED!")
+    print(f"✅ {bot.user} V3.3 — UNKNOWN FIXED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
-    print("✅ Auto checker started")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
