@@ -182,8 +182,12 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} IS ONLINE!")
-    await bot.tree.sync()
+    print(f"✅ {bot.user} is ONLINE!")
+    try:
+        await bot.tree.sync()
+        print("✅ Slash commands synced successfully")
+    except Exception as e:
+        print(f"Sync warning: {e}")
     scheduler.start()
 
 if __name__ == "__main__":
