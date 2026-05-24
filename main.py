@@ -31,9 +31,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... hold tight you melt 😂",
+    "🔍 Pulling **REAL** live data... hold tight you melt 😂",
     "🔍 Fetching fresh tips... 35-55s",
-    "🔍 Loading... go touch grass",
+    "🔍 Loading accurate cards...",
 ]
 
 def get_random_loading_message():
@@ -64,15 +64,15 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== GET TIPS (Real Data Forced) ======================
+# ====================== GET TIPS (Strong Real Data Prompt) ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        async with asyncio.timeout(70):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
+        async with asyncio.timeout(75):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.65,
+                temperature=0.6,
                 max_turns=5,
             )
             
@@ -82,27 +82,28 @@ async def get_sports_tips(sport: str, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Search real data first for this specific event: {specific_event} ({sport}).
+Search real data for this specific event: {specific_event} ({sport}).
 Give 3 tips. Reply with VALID JSON ONLY.
 """
             else:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 STRICT 48 HOUR RULE: ONLY events from NOW until {cutoff}.
-Focus ONLY on **{sport}**.
 
-**YOU MUST USE web_search TOOL** to get real upcoming races and declared runners.
+**YOU MUST USE web_search TOOL** to get real upcoming {sport} fixtures, times and declared runners.
+
+Focus ONLY on **{sport}**.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Full race name with time", "selection": "Horse / Team", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Full accurate race name", "selection": "Real horse/team", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
             
-            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS search real data first using tools. Reply with clean VALID JSON only. Be brutally funny."))
+            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS use web_search tool first for real accurate data. Never hallucinate races. Reply with clean VALID JSON only. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -123,9 +124,9 @@ Exactly 4 tips.
         return "❌ Timed out. Try again.", []
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips.", []
+        return "❌ Failed to fetch real tips.", []
 
-# ====================== SAVE & AUTO CHECKER ======================
+# Save & Auto Checker (same as before)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -150,7 +151,6 @@ async def check_individual_results(entry):
     try:
         client = AsyncClient(api_key=XAI_API_KEY, timeout=50)
         chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6, max_turns=4)
-        
         prompt = f"Current time: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}\n\nTips:\n{json.dumps(entry.get('tips', []), indent=2)}\n\nMark finished ones with ✅ WON or ❌ LOST. Be savage."
         chat.append(system("You are a savage Racing AI bot."))
         chat.append(user(prompt))
@@ -165,10 +165,8 @@ async def auto_check_tips():
         if not TIPS_FILE.exists(): return
         with open(TIPS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
         channel = bot.get_channel(CHANNEL_ID)
         if not channel: return
-        
         for key, entry in list(data.items()):
             if not entry.get("tips"): continue
             result = await check_individual_results(entry)
@@ -182,7 +180,7 @@ async def auto_check_tips():
     except Exception as e:
         logger.error(f"Auto check error: {e}")
 
-# ====================== COMMANDS ======================
+# Commands (same)
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
@@ -231,10 +229,11 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.5 — REAL RACE DATA ENFORCED!")
+    print(f"✅ {bot.user} V3.6 — REAL DATA ENFORCED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
+    
