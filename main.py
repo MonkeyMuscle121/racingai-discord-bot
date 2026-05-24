@@ -32,9 +32,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling live data... 40-65 seconds. Go make a brew you impatient cunt 😂",
-    "🔍 Analysing real-time... This takes 40-65s. Go piss or buy some $GAINZ",
-    "🔍 Fetching fresh tips... 40-65 seconds. Stop crying",
+    "🔍 Pulling live data... Hold tight you impatient cunt 😂",
+    "🔍 Analysing real-time... This takes 40-65s. Go piss or buy $GAINZ",
+    "🔍 Fetching fresh tips... Stop crying",
     "🔍 Live data loading... Go touch grass you melt",
 ]
 
@@ -54,44 +54,40 @@ def clean_response(text: str) -> str:
 # ====================== DISPLAY ======================
 def format_tips_for_display(tips_list):
     if not tips_list:
-        return "No solid tips found for this event."
+        return "No solid tips found right now."
     lines = []
     for i, tip in enumerate(tips_list, 1):
         day = tip.get("day", "")
         event = tip.get("event", "Unknown")
         selection = tip.get("selection", "Unknown")
         time = tip.get("time", "")
-        comment = tip.get("comment", "This one looks tasty... 👀")
+        comment = tip.get("comment", "This one smells like money... 👀")
         
         day_str = f"**{day}** " if day else ""
         time_str = f" ⏰ {time}" if time else ""
-        
         lines.append(f"**{i}.** {day_str}{event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== JSON EXTRACTOR ======================
 def extract_json_from_text(text: str):
     try:
         start = text.find('{')
         end = text.rfind('}') + 1
-        if start == -1:
-            raise ValueError
+        if start == -1: raise ValueError
         json_str = text[start:end]
         parsed = json.loads(json_str)
         return parsed.get("tips", []) if isinstance(parsed.get("tips"), list) else []
     except:
-        logger.warning("JSON parse failed, trying fallback...")
         return []
 
 # ====================== GET TIPS ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=90)
+        client = AsyncClient(api_key=XAI_API_KEY, timeout=70)  # Reduced timeout
         chat = client.chat.create(
             model="grok-4.20-reasoning",
             tools=[web_search(), x_search()],
             temperature=0.7,
-            max_turns=6,
+            max_turns=5,
         )
         
         now = datetime.now(pytz.timezone('Europe/London'))
@@ -100,14 +96,10 @@ async def get_sports_tips(sport: str, specific_event: str = None):
         if specific_event:
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give me 3 different betting angles for this **specific event only**: {specific_event} ({sport}).
+Give 3 different betting angles for this specific event: {specific_event} ({sport}).
 
-Reply with **VALID JSON ONLY**. No other text.
-{{
-  "tips": [
-    {{"day": "Thursday", "event": "{specific_event}", "selection": "Betting pick", "time": "HH:MM", "comment": "Cheeky funny comment"}}
-  ]
-}}
+**VALID JSON ONLY**:
+{{"tips": [{{"day": "Thursday", "event": "{specific_event}", "selection": "Pick", "time": "HH:MM", "comment": "Cheeky comment"}}]}}
 """
         else:
             prompt = f"""
@@ -117,18 +109,17 @@ Focus ONLY on **{sport}**.
 Reply with VALID JSON with exactly 4 tips.
 """
         
-        chat.append(system("You are a savage, cheeky Racing AI bot. Always reply with clean VALID JSON only. Be funny in the comment field."))
+        chat.append(system("You are a savage, cheeky Racing AI bot. Reply with VALID JSON ONLY. Be funny."))
         chat.append(user(prompt))
         response = await chat.sample()
         
         cleaned = clean_response(response.content)
         tips_list = extract_json_from_text(cleaned)
-        
         return format_tips_for_display(tips_list), tips_list
         
     except Exception as e:
-        logger.error(f"Error in get_sports_tips: {e}")
-        return "❌ Failed to get tips. Try again.", []
+        logger.error(f"get_sports_tips error: {e}")
+        return "❌ Error fetching tips. The AI is taking a nap. Try again in 30s.", []
 
 # ====================== SAVE / LOAD ======================
 def save_tips(sport: str, tips_list: list, specific_event=None):
@@ -138,7 +129,7 @@ def save_tips(sport: str, tips_list: list, specific_event=None):
             with open(TIPS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
         
-        key = normalize_sport(sport) + (f"_{specific_event[:30]}" if specific_event else "")
+        key = normalize_sport(sport) + (f"_{specific_event[:20]}" if specific_event else "")
         data[key] = {
             "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
             "sport": sport,
@@ -171,49 +162,9 @@ def cleanup_old_tips():
 
 # ====================== AUTO CHECKER ======================
 async def auto_check_tips():
-    logger.info("🔄 V2.7 Auto Checker Running...")
+    logger.info("🔄 Auto Checker Running...")
     data = load_all_tips()
     channel = bot.get_channel(CHANNEL_ID)
     if not channel: return
 
-    for key, entry in list(data.items()):
-        if not entry.get("tips"): continue
-        result_text = await check_individual_results(entry)
-        if result_text and any(x in result_text for x in ["✅", "❌", "WON", "LOST"]):
-            title = f"🔄 AUTO RESULTS — {entry['sport'].title()}"
-            if entry.get("event"):
-                title += f" | {entry['event']}"
-            embed = discord.Embed(title=title, description=f"📅 {entry['timestamp'][:16]}", color=0x00ff88)
-            embed.add_field(name="Verdict", value=result_text[:3900], inline=False)
-            embed.set_footer(text="✅ Won • ❌ Lost • Auto every 30 mins")
-            await channel.send(embed=embed)
-
-    cleanup_old_tips()
-
-async def check_individual_results(entry):
-    try:
-        client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
-        chat = client.chat.create(model="grok-4.20-reasoning", tools=[web_search(), x_search()], temperature=0.6, max_turns=6)
-        
-        prompt = f"""
-CURRENT TIME: {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M BST')}
-
-Check these tips:
-
-{json.dumps(entry['tips'], indent=2)}
-
-Mark finished events clearly with ✅ **WON** or ❌ **LOST**. Be savage.
-"""
-        chat.append(system("You are a savage Racing AI bot."))
-        chat.append(user(prompt))
-        response = await chat.sample()
-        return clean_response(response.content)
-    except:
-        return None
-
-# ====================== COMMANDS ======================
-@bot.tree.command(name="tips", description="Get 4 general hot tips")
-async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
-    await interaction.response.defer(thinking=True)
-    display_name = "All Sports" if sport.lower() == "all" else sport.replace("_", " ").title()
-    status_msg = await interaction.followup.send(get_random_loading_message
+   
