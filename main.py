@@ -31,20 +31,14 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Finding proper punts, not just favourites... hold tight you melt 😂",
-    "🔍 Digging for value bets...",
-    "🔍 Loading smart tips...",
+    "🔍 Pulling **REAL** declared runners only... hold tight 😂",
+    "🔍 Checking live race cards...",
+    "🔍 Finding proper punts...",
 ]
 
 def get_random_loading_message():
     import random
     return random.choice(LOADING_MESSAGES)
-
-def normalize_sport(sport: str) -> str:
-    sport_lower = sport.lower().strip()
-    if sport_lower in ["horse", "horses", "racing", "horse racing", "horseracing"]:
-        return "horse_racing"
-    return sport_lower
 
 def clean_response(text: str) -> str:
     return '\n'.join(line.strip() for line in text.strip().split('\n'))
@@ -64,13 +58,13 @@ def format_tips_for_display(tips_list):
 
 async def get_sports_tips(sport: str):
     try:
-        async with asyncio.timeout(75):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
+        async with asyncio.timeout(80):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=75)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.6,
-                max_turns=5,
+                temperature=0.5,
+                max_turns=6,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -78,21 +72,22 @@ async def get_sports_tips(sport: str):
             
             prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE - ONLY real races from NOW until {cutoff}.
+STRICT 48 HOUR RULE.
 
-Use tools to get accurate upcoming {sport} races.
-Give a good mix - some strong ones, some value.
+You MUST use web_search tool to find REAL upcoming {sport} races with declared runners.
+Only suggest horses that are actually running today or tomorrow.
+Do not hallucinate any race or horse.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Meet Name - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Meet - Race Name", "selection": "Real horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
 Exactly 4 tips.
 """
 
-            chat.append(system("You are a savage Racing AI bot. ONLY use real data. Never hallucinate races or horses. Be brutally funny."))
+            chat.append(system("You are a savage Racing AI bot. ONLY use real data from tools. Never make up races or horses. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -111,7 +106,7 @@ Exactly 4 tips.
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again."
+        return "❌ Failed to fetch real tips. Try again."
 
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
@@ -137,8 +132,9 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "horse"):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V4.6 — FIXED!")
+    print(f"✅ {bot.user} V4.7 — ANTI-HALLUCINATION MODE!")
     await bot.tree.sync()
+    scheduler.start()
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
