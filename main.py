@@ -73,13 +73,14 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give 3 tips for this specific event: {specific_event}.
+Give 3 cheeky tips for this specific event: {specific_event}.
 """
             else:
+                sport_str = sport if sport and sport.lower() != "all" else "various sports"
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
 ONLY events from NOW until {cutoff}.
-Give 4 tips from varied sports (football, tennis, boxing, ufc etc). No horse racing.
+Give 4 good tips for {sport_str}.
 """
 
             prompt += """
@@ -110,7 +111,7 @@ Reply with **VALID JSON ONLY**:
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips.", []
+        return "❌ Failed to fetch tips. Try again.", []
 
 def save_tips(tips_list, specific_event=None):
     try:
@@ -131,22 +132,24 @@ def save_tips(tips_list, specific_event=None):
         pass
 
 # ====================== COMMANDS ======================
-@bot.tree.command(name="tips", description="Get 4 varied hot tips")
-async def hot_tips(interaction: discord.Interaction):
+@bot.tree.command(name="tips", description="Get 4 hot tips")
+async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
     
     try:
-        nice_display, tips_list = await get_sports_tips()
+        nice_display, tips_list = await get_sports_tips(sport)
         save_tips(tips_list)
 
+        title = f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips" if sport.lower() != "all" else "🔥 Top 4 Varied Hot Tips"
+        
         embed = discord.Embed(
-            title="🔥 Top 4 Varied Hot Tips",
+            title=title,
             description=f"📅 {datetime.now(pytz.timezone('Europe/London')).strftime('%A %d %B %Y %H:%M')} BST",
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -154,7 +157,7 @@ async def hot_tips(interaction: discord.Interaction):
         try: await status_msg.delete()
         except: pass
 
-@bot.tree.command(name="tipsevent", description="Get 3 tips for a specific match/fight")
+@bot.tree.command(name="tipsevent", description="Get 3 tips for a specific event")
 async def tips_event(interaction: discord.Interaction, sport: str, event: str):
     await interaction.response.defer(thinking=True)
     status_msg = await interaction.followup.send(get_random_loading_message())
@@ -169,7 +172,7 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
             color=0xff00ff
         )
         embed.add_field(name="Tips", value=nice_display, inline=False)
-        embed.set_footer(text="🔥 For entertainment only • Gamble responsibly • 18+")
+        embed.set_footer(text="🔥 For entertainment only • Not real betting advice • Gamble responsibly • 18+")
         await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send("❌ Error. Try again.")
@@ -179,7 +182,7 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V5.1 — MULTI-SPORT + /tipsevent + AUTO CHECKER!")
+    print(f"✅ {bot.user} IS ONLINE!")
     await bot.tree.sync()
     scheduler.start()
 
