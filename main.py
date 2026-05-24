@@ -31,9 +31,9 @@ TIPS_FILE = Path("tips_history.json")
 TIPS_FILE.touch(exist_ok=True)
 
 LOADING_MESSAGES = [
-    "🔍 Pulling **REAL** live data... hold tight you melt 😂",
-    "🔍 Fetching fresh tips... 35-55s",
-    "🔍 Loading accurate cards...",
+    "🔍 Pulling **REAL** declared runners... hold tight 😂",
+    "🔍 Fetching live race cards... 40-60s",
+    "🔍 Loading accurate tips...",
 ]
 
 def get_random_loading_message():
@@ -64,7 +64,7 @@ def format_tips_for_display(tips_list):
         lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
-# ====================== GET TIPS (Strong Real Data Prompt) ======================
+# ====================== STRONGER PROMPT ======================
 async def get_sports_tips(sport: str, specific_event: str = None):
     try:
         async with asyncio.timeout(75):
@@ -73,37 +73,36 @@ async def get_sports_tips(sport: str, specific_event: str = None):
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
                 temperature=0.6,
-                max_turns=5,
+                max_turns=6,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
             cutoff = (now + timedelta(hours=48)).strftime('%A %d %B %Y')
             
-            if specific_event:
-                prompt = f"""
+            base_prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Search real data for this specific event: {specific_event} ({sport}).
-Give 3 tips. Reply with VALID JSON ONLY.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}.
+
+YOU MUST USE web_search TOOL to get REAL upcoming {sport} races with declared runners and accurate times.
+Do not hallucinate any horses or times.
 """
+
+            if specific_event:
+                prompt = base_prompt + f"\nFocus on this specific event: {specific_event}\nGive 3 tips."
             else:
-                prompt = f"""
-CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events from NOW until {cutoff}.
-
-**YOU MUST USE web_search TOOL** to get real upcoming {sport} fixtures, times and declared runners.
-
+                prompt = base_prompt + f"""
 Focus ONLY on **{sport}**.
+Give exactly 4 tips.
 
 Reply with **VALID JSON ONLY**:
 {{
   "tips": [
-    {{"event": "Full accurate race name", "selection": "Real horse/team", "time": "HH:MM", "comment": "Savage funny comment"}}
+    {{"event": "Full accurate race name", "selection": "Real declared horse", "time": "HH:MM", "comment": "Savage funny comment"}}
   ]
 }}
-Exactly 4 tips.
 """
-            
-            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS use web_search tool first for real accurate data. Never hallucinate races. Reply with clean VALID JSON only. Be brutally funny."))
+
+            chat.append(system("You are a savage, cheeky Racing AI bot. ALWAYS search real data first. Never hallucinate races or runners. Reply with clean VALID JSON only. Be brutally funny."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -126,7 +125,7 @@ Exactly 4 tips.
         logger.error(f"Error: {e}")
         return "❌ Failed to fetch real tips.", []
 
-# Save & Auto Checker (same as before)
+# Save & Auto Checker (unchanged)
 def save_tips(sport: str, tips_list: list, specific_event=None):
     try:
         data = {}
@@ -180,7 +179,7 @@ async def auto_check_tips():
     except Exception as e:
         logger.error(f"Auto check error: {e}")
 
-# Commands (same)
+# Commands
 @bot.tree.command(name="tips", description="Get 4 general hot tips")
 async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     await interaction.response.defer(thinking=True)
@@ -229,11 +228,10 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
 
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} V3.6 — REAL DATA ENFORCED!")
+    print(f"✅ {bot.user} V3.7 — REAL DATA MODE ACTIVATED!")
     await bot.tree.sync()
     scheduler.start()
     scheduler.add_job(auto_check_tips, 'interval', minutes=40, next_run_time=datetime.now(pytz.timezone('Europe/London')))
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
-    
