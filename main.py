@@ -27,13 +27,10 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler(timezone="Europe/London")
 
-TIPS_FILE = Path("tips_history.json")
-TIPS_FILE.touch(exist_ok=True)
-
 LOADING_MESSAGES = [
-    "🔍 Pulling REAL upcoming events... hold tight you melt 😂",
-    "🔍 Fetching fresh tips... 35-55s",
-    "🔍 Loading... go touch grass",
+    "🔍 Pulling REAL upcoming events only... hold tight you melt 😂",
+    "🔍 Fetching fresh tips...",
+    "🔍 Loading accurate picks...",
 ]
 
 def get_random_loading_message():
@@ -45,15 +42,13 @@ def clean_response(text: str) -> str:
 
 def format_tips_for_display(tips_list):
     if not tips_list:
-        return "No upcoming events in next 72hrs."
+        return "No upcoming events found in next 72 hours."
     lines = []
     for i, tip in enumerate(tips_list, 1):
         event = tip.get("event", "Unknown Event")
         selection = tip.get("selection", "Unknown")
-        time = tip.get("time", "")
-        comment = tip.get("comment", "This one smells spicy 👀")
-        time_str = f" ⏰ **{time}**" if time else ""
-        lines.append(f"**{i}.** {event}{time_str}\n**Pick:** {selection}\n**Comment:** {comment}")
+        comment = tip.get("comment", "Decent chance...")
+        lines.append(f"**{i}.** {event}\n**Pick:** {selection}\n**Comment:** {comment}")
     return "\n\n".join(lines)
 
 async def get_sports_tips(sport: str = None, specific_event: str = None):
@@ -63,7 +58,7 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.55,
+                temperature=0.5,
                 max_turns=6,
             )
             
@@ -73,31 +68,30 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 72 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
-NO past events. NO ongoing events. NO old matches.
+STRICT FUTURE RULE: ONLY real events STARTING from NOW until {cutoff}. 
+NO past events. NO old matches. NO fictional fixtures.
 
 Give 3 tips for this specific event: {specific_event}.
 """
             else:
-                sport_str = sport if sport and sport.lower() != "all" else "various sports"
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 72 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
-NO past events. NO ongoing events.
+STRICT FUTURE RULE: ONLY real events STARTING from NOW until {cutoff}. 
+NO past events. NO old matches.
 
-Give 4 good tips for {sport_str}.
+Give 4 varied hot tips from different sports.
 """
 
             prompt += """
 Reply with **VALID JSON ONLY**:
 {
   "tips": [
-    {"event": "Event name", "selection": "Pick", "time": "HH:MM", "comment": "Savage funny comment"}
+    {"event": "Event name", "selection": "Pick", "comment": "Deep funny analysis"}
   ]
 }
 """
 
-            chat.append(system("You are a savage, cheeky AI betting bot. ONLY include events that start in the FUTURE within next 72 hours. Never include past or ongoing events. Be brutally funny. Reply with clean VALID JSON only."))
+            chat.append(system("You are a savage, cheeky AI betting bot. ONLY use real future events within next 72 hours. Never hallucinate matches or players. Be brutally funny. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
@@ -116,25 +110,7 @@ Reply with **VALID JSON ONLY**:
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        return "❌ Failed to fetch tips. Try again.", []
-
-def save_tips(tips_list, specific_event=None):
-    try:
-        data = {}
-        if TIPS_FILE.exists():
-            with open(TIPS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        
-        key = "latest" + (f"_{specific_event[:20]}" if specific_event else "")
-        data[key] = {
-            "timestamp": datetime.now(pytz.timezone('Europe/London')).isoformat(),
-            "tips": tips_list
-        }
-        
-        with open(TIPS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except:
-        pass
+        return "❌ Failed to fetch real tips. Try again.", []
 
 # ====================== COMMANDS ======================
 @bot.tree.command(name="tips", description="Get 4 hot tips")
@@ -144,7 +120,6 @@ async def hot_tips(interaction: discord.Interaction, sport: str = "all"):
     
     try:
         nice_display, tips_list = await get_sports_tips(sport)
-        save_tips(tips_list)
 
         title = f"🔥 Top 4 {sport.replace('_', ' ').title()} Hot Tips" if sport.lower() != "all" else "🔥 Top 4 Varied Hot Tips"
         
@@ -169,7 +144,6 @@ async def tips_event(interaction: discord.Interaction, sport: str, event: str):
     
     try:
         nice_display, tips_list = await get_sports_tips(sport, event)
-        save_tips(tips_list, event)
 
         embed = discord.Embed(
             title=f"🎯 3 Tips for: {event}",
