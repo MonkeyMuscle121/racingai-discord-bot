@@ -58,13 +58,13 @@ def format_tips_for_display(tips_list):
 
 async def get_sports_tips(sport: str = None, specific_event: str = None):
     try:
-        async with asyncio.timeout(70):
-            client = AsyncClient(api_key=XAI_API_KEY, timeout=65)
+        async with asyncio.timeout(75):
+            client = AsyncClient(api_key=XAI_API_KEY, timeout=70)
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.7,
-                max_turns=4,
+                temperature=0.6,
+                max_turns=5,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -73,13 +73,14 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-Give 3 cheeky tips for this specific event: {specific_event}.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No ongoing or past events.
+Give 3 tips for this specific event: {specific_event}.
 """
             else:
                 sport_str = sport if sport and sport.lower() != "all" else "various sports"
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-ONLY events from NOW until {cutoff}.
+STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No ongoing or past events.
 Give 4 good tips for {sport_str}.
 """
 
@@ -92,7 +93,7 @@ Reply with **VALID JSON ONLY**:
 }
 """
 
-            chat.append(system("You are a savage, cheeky AI betting bot. Be brutally funny. Reply with clean VALID JSON only."))
+            chat.append(system("You are a savage, cheeky AI betting bot. ONLY use real upcoming events within the next 48 hours. Never include ongoing or past events. Be brutally funny. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
