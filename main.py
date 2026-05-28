@@ -73,14 +73,18 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No ongoing or past events.
+STRICT 48 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
+NO past or ongoing events allowed.
+
 Give 3 tips for this specific event: {specific_event}.
 """
             else:
                 sport_str = sport if sport and sport.lower() != "all" else "various sports"
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events starting from NOW until {cutoff}. No ongoing or past events.
+STRICT 48 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
+NO past or ongoing events allowed.
+
 Give 4 good tips for {sport_str}.
 """
 
@@ -93,7 +97,7 @@ Reply with **VALID JSON ONLY**:
 }
 """
 
-            chat.append(system("You are a savage, cheeky AI betting bot. ONLY use real upcoming events within the next 48 hours. Never include ongoing or past events. Be brutally funny. Reply with clean VALID JSON only."))
+            chat.append(system("You are a savage, cheeky AI betting bot. ONLY include events that have NOT started yet. Be brutally funny. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
