@@ -63,8 +63,8 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             chat = client.chat.create(
                 model="grok-4.20-reasoning",
                 tools=[web_search(), x_search()],
-                temperature=0.6,
-                max_turns=5,
+                temperature=0.55,
+                max_turns=6,
             )
             
             now = datetime.now(pytz.timezone('Europe/London'))
@@ -73,8 +73,8 @@ async def get_sports_tips(sport: str = None, specific_event: str = None):
             if specific_event:
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
-NO past or ongoing events allowed.
+STRICT 48 HOUR RULE: ONLY events that have NOT STARTED YET and are within next 48 hours until {cutoff}.
+No past or ongoing events allowed.
 
 Give 3 tips for this specific event: {specific_event}.
 """
@@ -82,8 +82,8 @@ Give 3 tips for this specific event: {specific_event}.
                 sport_str = sport if sport and sport.lower() != "all" else "various sports"
                 prompt = f"""
 CURRENT TIME: {now.strftime('%A %d %B %Y %H:%M BST')}
-STRICT 48 HOUR RULE: ONLY events STARTING from NOW until {cutoff}. 
-NO past or ongoing events allowed.
+STRICT 48 HOUR RULE: ONLY events that have NOT STARTED YET and are within next 48 hours until {cutoff}.
+No past or ongoing events allowed.
 
 Give 4 good tips for {sport_str}.
 """
@@ -97,7 +97,7 @@ Reply with **VALID JSON ONLY**:
 }
 """
 
-            chat.append(system("You are a savage, cheeky AI betting bot. ONLY include events that have NOT started yet. Be brutally funny. Reply with clean VALID JSON only."))
+            chat.append(system("You are a savage, cheeky AI betting bot. ONLY include events that start in the future. Never include past or ongoing events. Be brutally funny. Reply with clean VALID JSON only."))
             chat.append(user(prompt))
             response = await chat.sample()
             
